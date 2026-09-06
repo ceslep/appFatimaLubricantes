@@ -1,0 +1,6 @@
+{
+    "require": {
+        "minishlink/web-push": "^10.1",
+        "google/apiclient": "2.18"
+    }
+}

@@ -1,0 +1,85 @@
+<?php
+/**
+ * get_horas.php
+ * 
+ * Obtiene los datos de la hoja de cálculo de Google Sheets.
+ */
+
+require __DIR__ . '/vendor/autoload.php';
+
+use Google\Client;
+use Google\Service\Sheets;
+
+// Configuración de archivos
+const SERVICE_ACCOUNT_KEY_FILE = __DIR__ . '/assets/serviceaccount.json';
+
+// CORS y Cabeceras
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *'); 
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit();
+}
+
+try {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        throw new Exception('Método no permitido. Use POST.');
+    }
+
+    // Leer datos del payload JSON
+    $input = file_get_contents('php://input');
+    $data = json_decode($input, true);
+    
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new Exception('JSON inválido.');
+    }
+
+    $spreadsheetId = $data['spreadsheetId'] ?? '1UW_dbtJEFJeOjCg323HJPaacqPIztw_9bGI5Rw6HRxQ';
+    $worksheetTitle = $data['worksheetTitle'] ?? date('Y');
+    $range = $worksheetTitle . '!A:AI';
+
+    // Inicializar Google Client
+    $client = new Client();
+    $client->setApplicationName('Horas laborables');
+    $client->setScopes([Sheets::SPREADSHEETS]);
+    
+    if (!file_exists(SERVICE_ACCOUNT_KEY_FILE)) {
+        throw new Exception('Archivo de credenciales no encontrado en el servidor.');
+    }
+    
+    $client->setAuthConfig(SERVICE_ACCOUNT_KEY_FILE);
+
+    $service = new Sheets($client);
+
+    // Obtener valores
+    $response = $service->spreadsheets_values->get($spreadsheetId, $range);
+    $values = []; // Initialize as empty array
+    if ($response !== null) { // Check if $response is not null
+        $values = $response->getValues();
+    }
+    $dataWithIndex = [];
+    if ($values) {
+        foreach ($values as $idx => $row) {
+            $dataWithIndex[] = [
+                'rowIndex' => $idx + 1, // Google Sheets rows are 1-based
+                'values' => $row
+            ];
+        }
+    }
+
+    echo json_encode([
+        'success' => true,
+        'records' => $dataWithIndex
+    ]);
+
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => $e->getMessage()
+    ]);
+}
+?>

@@ -1,0 +1,37 @@
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","debug":true,"filterGrado":"1001","filterMateria":"educación artística"}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"educacionartistica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"xyznonexistent","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":null,"maxRegistros":5}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"educacionartistica","maxRegistros":5}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":null,"maxRegistros":5}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","maxRegistros":5}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","maxRegistros":5}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","maxRegistros":5}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","maxRegistros":5}
+INPUT: {"returnActividades":true}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1001","filterMateria":"tecnología e informática","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"quimica","filterDocente":"cesar leandro patiño velez","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"educación artística","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"educación artística","filterDocente":"cesar leandro patiño velez","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","returnActividades":true,"filterGrado":"1001","filterMateria":"educación artística","filterDocente":"cesar leandro patiño velez","maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1001","filterMateria":"educación artística","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos"}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"601","filterMateria":"emprendimiento","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1101","filterMateria":"tecnología e informática","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"601","filterMateria":"emprendimiento","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1102","filterMateria":"inglés","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1101","filterMateria":"inglés","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1101","filterMateria":"física","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"601","filterMateria":"emprendimiento","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1001","filterMateria":"física","returnActividades":true,"maxRegistros":10}
+INPUT: {"spreadsheetId":"1Q6EcSvccB7BoJiw9PD2s5J4PB8AJmr-6v-yKhiE4E8k","worksheetTitle":"Datos","filterDocente":"cesar leandro patiño velez","filterGrado":"1001","filterMateria":"física","returnActividades":true,"maxRegistros":10}
