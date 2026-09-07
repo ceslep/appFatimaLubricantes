@@ -2,13 +2,29 @@ export interface Venta {
   row: number;
   fecha: string;
   producto: string;
+  presentacion?: string;
   cantidad: number;
   precio_unitario: number;
   total: number;
   cliente: string;
+  cliente_doc?: string;
   placa: string;
   cajero: string;
   forma_pago: string;
+}
+
+export interface Cliente {
+  row: number;
+  identificacion: string;
+  nombres: string;
+  telefono: string;
+  correo: string;
+  direccion: string;
+  notas: string;
+  placa1?: string;
+  placa2?: string;
+  placa3?: string;
+  placa4?: string;
 }
 
 export interface Entrada {
@@ -67,4 +83,4 @@ export interface UsuarioLogueado {
   nombre: string;
 }
 
-export type VistaActual = 'dashboard' | 'registrar-venta' | 'registrar-entrada' | 'inventario' | 'historial' | 'historial-entradas' | 'admin-usuarios';
+export type VistaActual = 'dashboard' | 'registrar-venta' | 'registrar-entrada' | 'inventario' | 'historial' | 'historial-entradas' | 'reportes' | 'admin-usuarios' | 'configuracion' | 'clientes';

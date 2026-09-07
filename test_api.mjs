@@ -14,7 +14,11 @@ function testEndpoint(action) {
         console.log(`\n=== ${action} ===`);
         try {
           const parsed = JSON.parse(data);
-          console.log(JSON.stringify(parsed, null, 2).substring(0, 1500));
+          if (parsed.data && Array.isArray(parsed.data)) {
+            parsed.data.slice(0, 2).forEach(item => console.log(JSON.stringify(item)));
+          } else {
+            console.log(JSON.stringify(parsed));
+          }
         } catch {
           console.log('Raw:', data.substring(0, 500));
         }
@@ -28,5 +32,4 @@ function testEndpoint(action) {
 
 (async () => {
   await testEndpoint('listar_ventas');
-  await testEndpoint('resumen_dia');
 })();

@@ -65,7 +65,32 @@ function lub_get($sheet, $range = 'A:H') {
 }
 
 function lub_get_all($sheet) {
-    return lub_request('GET', $sheet . '!A:H');
+    // A:K (11 columnas): cubre todas las hojas del sistema
+    // (ventas llegó a 11 columnas con Presentación y Cliente Doc)
+    return lub_request('GET', $sheet . '!A:K');
+}
+
+function lub_ensure_sheet($title) {
+    $check = lub_request('GET', $title . '!A1:A1');
+    if (($check['code'] ?? 0) === 200) return true;
+    $token = lub_get_token();
+    if (!$token) return false;
+    $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . LUB_SPREADSHEET_ID . '/:batchUpdate';
+    $body = json_encode(['requests' => [['addSheet' => ['properties' => ['title' => $title]]]]]);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+        ],
+    ]);
+    curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return $code === 200;
 }
 
 function lub_append($sheet, $values) {

@@ -13,7 +13,11 @@ define('LUB_HOJA_SALIDAS', 'salidas');
 define('LUB_HOJA_USUARIOS', 'usuarios');
 
 define('LUB_HEADERS_DATOS', ['Producto', 'Presentacion', 'Precio Venta', 'Stock', 'Activo']);
-define('LUB_HEADERS_VENTAS', ['Fecha', 'Producto', 'Cantidad', 'Precio Unitario', 'Total', 'Forma de pago', 'Cliente', 'Placa Vehiculo', 'Cajero']);
+define('LUB_HEADERS_VENTAS', ['Fecha', 'Producto', 'Presentación', 'Cantidad', 'Precio Unitario', 'Total', 'Forma de pago', 'Cliente', 'Placa Vehiculo', 'Cajero', 'Cliente Doc']);
 define('LUB_HEADERS_ENTRADAS', ['Fecha', 'Producto', 'Cantidad', 'Precio Compra', 'Proveedor', 'Observaciones', 'Cajero']);
 define('LUB_HEADERS_SALIDAS', ['Fecha', 'Producto', 'Cantidad', 'Precio Venta', 'Tipo', 'Cajero']);
 define('LUB_HEADERS_USUARIOS', ['Usuario', 'Password', 'Rol', 'Nombre Completo', 'Activo']);
+define('LUB_HOJA_CONFIG', 'config');
+define('LUB_HEADERS_CONFIG', ['Clave', 'Valor']);
+define('LUB_HOJA_CLIENTES', 'clientes');
+define('LUB_HEADERS_CLIENTES', ['Identificacion', 'Nombres', 'Telefono', 'Correo', 'Direccion', 'Placa 1', 'Placa 2', 'Placa 3', 'Placa 4', 'Observaciones']);

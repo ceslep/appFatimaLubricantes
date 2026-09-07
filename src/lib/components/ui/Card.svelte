@@ -1,7 +1,7 @@
 <script lang="ts">
-  let { children, className = '' }: { children?: any; className?: string } = $props();
+  let { children, className = '', hover = false }: { children?: any; className?: string; hover?: boolean } = $props();
 </script>
 
-<div class="glass-card rounded-2xl {className}">
+<div class="panel {hover ? 'panel-hover' : ''} {className}">
   {@render children?.()}
 </div>

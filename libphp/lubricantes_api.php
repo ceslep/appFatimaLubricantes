@@ -1,5 +1,5 @@
 <?php
-// v3.2 - API Lubricantes - Catalogo + Ventas + Roles - Fix precios $, dashboard, historial
+// v3.5 - API Lubricantes - Fix cajero registros viejos (count cols) y dashboard
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -60,6 +60,71 @@ try {
             echo json_encode(['success' => true, 'data' => $productos]);
             exit;
 
+        case 'obtener_config':
+            lub_ensure_sheet(LUB_HOJA_CONFIG);
+            ensure_headers(LUB_HOJA_CONFIG, LUB_HEADERS_CONFIG);
+            $res = lub_get_all(LUB_HOJA_CONFIG);
+            $valores = [];
+            if (isset($res['data']['values'])) {
+                foreach ($res['data']['values'] as $i => $row) {
+                    if ($i === 0) continue;
+                    $clave = strtolower(trim($row[0] ?? ''));
+                    $valores[$clave] = strtoupper(trim($row[1] ?? ''));
+                }
+            }
+            $defectos = [
+                'enviar_whatsapp' => 'FALSE',
+                'cliente_obligatorio' => 'FALSE',
+            ];
+            $out = [];
+            foreach ($defectos as $k => $d) {
+                $out[$k] = isset($valores[$k]) && in_array($valores[$k], ['TRUE', 'FALSE']) ? $valores[$k] : $d;
+            }
+            echo json_encode(['success' => true, 'data' => $out]);
+            exit;
+
+        case 'guardar_config':
+            lub_ensure_sheet(LUB_HOJA_CONFIG);
+            ensure_headers(LUB_HOJA_CONFIG, LUB_HEADERS_CONFIG);
+            $permitidas = ['enviar_whatsapp', 'cliente_obligatorio'];
+            $cambios = [];
+            foreach ($permitidas as $clave) {
+                if (array_key_exists($clave, $input)) {
+                    $valor = strtoupper(trim((string)$input[$clave]));
+                    if (!in_array($valor, ['TRUE', 'FALSE'])) {
+                        http_response_code(400);
+                        echo json_encode(['success' => false, 'error' => 'Valor invalido para ' . $clave]);
+                        exit;
+                    }
+                    $cambios[$clave] = $valor;
+                }
+            }
+            if (empty($cambios)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Sin parametros de configuracion']);
+                exit;
+            }
+            foreach ($cambios as $clave => $valor) {
+                $res = lub_get_all(LUB_HOJA_CONFIG);
+                $fila = 0;
+                if (isset($res['data']['values'])) {
+                    foreach ($res['data']['values'] as $i => $row) {
+                        if ($i === 0) continue;
+                        if (strtolower(trim($row[0] ?? '')) === $clave) {
+                            $fila = $i + 1;
+                            break;
+                        }
+                    }
+                }
+                if ($fila > 0) {
+                    lub_update(LUB_HOJA_CONFIG, $fila, [$clave, $valor]);
+                } else {
+                    lub_append(LUB_HOJA_CONFIG, [$clave, $valor]);
+                }
+            }
+            echo json_encode(['success' => true, 'message' => 'Configuracion guardada']);
+            exit;
+
         case 'productos_mas_vendidos':
             ensure_headers(LUB_HOJA_DATOS, LUB_HEADERS_DATOS);
             ensure_headers(LUB_HOJA_VENTAS, LUB_HEADERS_VENTAS);
@@ -84,7 +149,8 @@ try {
                     if ($i === 0) continue;
                     $prod = $row[1] ?? '';
                     if (!$prod) continue;
-                    $cant = floatval($row[2] ?? 0);
+                    $cantIdx = count($row) >= 10 ? 3 : 2;
+                    $cant = floatval($row[$cantIdx] ?? 0);
                     if (!isset($ventasCount[$prod])) $ventasCount[$prod] = 0;
                     $ventasCount[$prod] += $cant;
                 }
@@ -167,26 +233,60 @@ try {
             echo json_encode(['success' => false, 'error' => 'Producto no encontrado']);
             exit;
 
+        case 'actualizar_stock':
+            $producto = $input['producto'] ?? '';
+            $presentacion = $input['presentacion'] ?? '';
+            $stock = $input['stock'] ?? 0;
+            if (!$producto) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Producto requerido']);
+                exit;
+            }
+            ensure_headers(LUB_HOJA_DATOS, LUB_HEADERS_DATOS);
+            $resultDatos = lub_get_all(LUB_HOJA_DATOS);
+            if (isset($resultDatos['data']['values'])) {
+                foreach ($resultDatos['data']['values'] as $i => $row) {
+                    if ($i === 0) continue;
+                    if (($row[0] ?? '') === $producto && ($row[1] ?? '') === $presentacion) {
+                        $rowNum = $i + 1;
+                        lub_update(LUB_HOJA_DATOS, $rowNum, [
+                            $row[0] ?? '',
+                            $row[1] ?? '',
+                            $row[2] ?? 0,
+                            $stock,
+                            $row[4] ?? 'TRUE',
+                        ]);
+                        echo json_encode(['success' => true, 'message' => 'Stock actualizado']);
+                        exit;
+                    }
+                }
+            }
+            http_response_code(404);
+            echo json_encode(['success' => false, 'error' => 'Producto no encontrado']);
+            exit;
+
         case 'registrar_venta':
             ensure_headers(LUB_HOJA_VENTAS, LUB_HEADERS_VENTAS);
             $now = date('d/m/Y H:i');
-            $producto = $input['producto'] ?? '';
+            $producto = trim($input['producto'] ?? '');
+            $presentacion = trim($input['presentacion'] ?? '');
             $cantidad = floatval($input['cantidad'] ?? 0);
             $precio_unitario = 0;
             $resultDatos = lub_get_all(LUB_HOJA_DATOS);
             if (isset($resultDatos['data']['values'])) {
                 foreach ($resultDatos['data']['values'] as $i => $row) {
                     if ($i === 0) continue;
-                    if (trim($row[0] ?? '') === trim($producto)) {
-                        $precio_unitario = floatval(str_replace(['$', '.'], '', $row[2] ?? '0'));
-                        break;
-                    }
+                    if (trim($row[0] ?? '') !== $producto) continue;
+                    if ($presentacion !== '' && trim($row[1] ?? '') !== $presentacion) continue;
+                    $precio_unitario = floatval(str_replace(['$', '.'], '', $row[2] ?? '0'));
+                    break;
                 }
             }
             $total = $cantidad * $precio_unitario;
             $values = [
                 $now,
                 $producto,
+                $presentacion,
                 $cantidad,
                 $precio_unitario,
                 $total,
@@ -194,25 +294,26 @@ try {
                 $input['cliente'] ?? '',
                 $input['placa'] ?? '',
                 $input['cajero'] ?? '',
+                trim($input['cliente_doc'] ?? ''),
             ];
             $result = lub_append(LUB_HOJA_VENTAS, $values);
             if ($result['code'] === 200) {
                 if (isset($resultDatos['data']['values'])) {
                     foreach ($resultDatos['data']['values'] as $i => $row) {
                         if ($i === 0) continue;
-                        if (trim($row[0] ?? '') === trim($producto)) {
-                            $rowNum = $i + 1;
-                            $stockActual = floatval($row[3] ?? 0);
-                            $nuevoStock = $stockActual - $cantidad;
-                            lub_update(LUB_HOJA_DATOS, $rowNum, [
-                                $row[0] ?? '',
-                                $row[1] ?? '',
-                                $row[2] ?? '',
-                                $nuevoStock,
-                                $row[4] ?? 'TRUE',
-                            ]);
-                            break;
-                        }
+                        if (trim($row[0] ?? '') !== $producto) continue;
+                        if ($presentacion !== '' && trim($row[1] ?? '') !== $presentacion) continue;
+                        $rowNum = $i + 1;
+                        $stockActual = floatval($row[3] ?? 0);
+                        $nuevoStock = $stockActual - $cantidad;
+                        lub_update(LUB_HOJA_DATOS, $rowNum, [
+                            $row[0] ?? '',
+                            $row[1] ?? '',
+                            $row[2] ?? '',
+                            $nuevoStock,
+                            $row[4] ?? 'TRUE',
+                        ]);
+                        break;
                     }
                 }
                 lub_append(LUB_HOJA_SALIDAS, [
@@ -234,6 +335,7 @@ try {
             ensure_headers(LUB_HOJA_VENTAS, LUB_HEADERS_VENTAS);
             $items = $input['items'] ?? [];
             $cliente = $input['cliente'] ?? '';
+            $clienteDoc = trim($input['cliente_doc'] ?? '');
             $placa = $input['placa'] ?? '';
             $cajero = $input['cajero'] ?? '';
             $formaPago = $input['forma_pago'] ?? 'Efectivo';
@@ -245,36 +347,47 @@ try {
             $now = date('d/m/Y H:i');
             $ok = 0;
             $errors = [];
+            $datosVentas = [];
             $preciosDatos = [];
             $resultDatosAll = lub_get_all(LUB_HOJA_DATOS);
             if (isset($resultDatosAll['data']['values'])) {
                 foreach ($resultDatosAll['data']['values'] as $i => $row) {
                     if ($i === 0) continue;
-                    $preciosDatos[trim($row[0] ?? '')] = floatval(str_replace(['$', '.'], '', $row[2] ?? '0'));
+                    $nombre = trim($row[0] ?? '');
+                    $pres = trim($row[1] ?? '');
+                    $clave = $nombre . '|' . $pres;
+                    $datosVentas[] = ['nombre' => $nombre, 'pres' => $pres, 'fila' => $i + 1];
+                    if (!isset($preciosDatos[$clave])) {
+                        $preciosDatos[$clave] = floatval(str_replace(['$', '.'], '', $row[2] ?? '0'));
+                    }
                 }
             }
             foreach ($items as $item) {
                 $producto = trim($item['producto'] ?? '');
+                $presentacionItem = trim($item['presentacion'] ?? '');
                 $cantidad = floatval($item['cantidad'] ?? 0);
-                $precio_unitario = $preciosDatos[$producto] ?? 0;
+                $claveItem = $producto . '|' . $presentacionItem;
+                $precio_unitario = $preciosDatos[$claveItem] ?? 0;
                 $total = $cantidad * $precio_unitario;
-                $values = [$now, $producto, $cantidad, $precio_unitario, $total, $formaPago, $cliente, $placa, $cajero];
+                $values = [$now, $producto, $presentacionItem, $cantidad, $precio_unitario, $total, $formaPago, $cliente, $placa, $cajero, $clienteDoc];
                 $result = lub_append(LUB_HOJA_VENTAS, $values);
                 if ($result['code'] === 200) {
                     $ok++;
-                    if (isset($resultDatosAll['data']['values'])) {
-                        foreach ($resultDatosAll['data']['values'] as $i => $row) {
-                            if ($i === 0) continue;
-                            if (trim($row[0] ?? '') === $producto) {
-                                $rowNum = $i + 1;
-                                $stockActual = floatval($row[3] ?? 0);
-                                $nuevoStock = $stockActual - $cantidad;
-                                lub_update(LUB_HOJA_DATOS, $rowNum, [
-                                    $row[0] ?? '', $row[1] ?? '', $row[2] ?? '', $nuevoStock, $row[4] ?? 'TRUE',
-                                ]);
-                                break;
-                            }
+                    // Descontar stock de la referencia exacta (nombre + presentación)
+                    $filaAfectada = 0;
+                    foreach ($datosVentas as $d) {
+                        if ($d['nombre'] === $producto && $d['pres'] === $presentacionItem) {
+                            $filaAfectada = $d['fila'];
+                            break;
                         }
+                    }
+                    if ($filaAfectada > 0 && isset($resultDatosAll['data']['values'][$filaAfectada - 1])) {
+                        $rrow = $resultDatosAll['data']['values'][$filaAfectada - 1];
+                        $stockActual = floatval($rrow[3] ?? 0);
+                        $nuevoStock = $stockActual - $cantidad;
+                        lub_update(LUB_HOJA_DATOS, $filaAfectada, [
+                            $rrow[0] ?? '', $rrow[1] ?? '', $rrow[2] ?? '', $nuevoStock, $rrow[4] ?? 'TRUE',
+                        ]);
                     }
                     lub_append(LUB_HOJA_SALIDAS, [$now, $producto, $cantidad, $precio_unitario, 'Venta', $cajero]);
                 } else {
@@ -291,17 +404,57 @@ try {
             if (isset($result['data']['values'])) {
                 foreach ($result['data']['values'] as $i => $row) {
                     if ($i === 0 && strtolower($row[0] ?? '') === 'fecha') continue;
+                    if (count($row) >= 11) {
+                        // Layout con Presentación y Cliente Doc
+                        $ventas[] = [
+                            'row' => $i + 1,
+                            'fecha' => $row[0] ?? '',
+                            'producto' => $row[1] ?? '',
+                            'presentacion' => $row[2] ?? '',
+                            'cantidad' => floatval(str_replace(['$', '.'], '', $row[3] ?? '0')),
+                            'precio_unitario' => floatval(str_replace(['$', '.'], '', $row[4] ?? '0')),
+                            'total' => floatval(str_replace(['$', '.'], '', $row[5] ?? '0')),
+                            'forma_pago' => $row[6] ?? '',
+                            'cliente' => $row[7] ?? '',
+                            'placa' => $row[8] ?? '',
+                            'cajero' => $row[9] ?? '',
+                            'cliente_doc' => $row[10] ?? '',
+                        ];
+                        continue;
+                    }
+                    if (count($row) === 10) {
+                        // Presentación pero sin Cliente Doc (transición)
+                        $ventas[] = [
+                            'row' => $i + 1,
+                            'fecha' => $row[0] ?? '',
+                            'producto' => $row[1] ?? '',
+                            'presentacion' => $row[2] ?? '',
+                            'cantidad' => floatval(str_replace(['$', '.'], '', $row[3] ?? '0')),
+                            'precio_unitario' => floatval(str_replace(['$', '.'], '', $row[4] ?? '0')),
+                            'total' => floatval(str_replace(['$', '.'], '', $row[5] ?? '0')),
+                            'forma_pago' => $row[6] ?? '',
+                            'cliente' => $row[7] ?? '',
+                            'cliente_doc' => '',
+                            'placa' => $row[8] ?? '',
+                            'cajero' => $row[9] ?? '',
+                        ];
+                        continue;
+                    }
+                    // Filas antiguas (sin Presentación)
+                    $hasFormaPago = count($row) >= 9;
                     $ventas[] = [
                         'row' => $i + 1,
                         'fecha' => $row[0] ?? '',
                         'producto' => $row[1] ?? '',
+                        'presentacion' => '',
                         'cantidad' => floatval(str_replace(['$', '.'], '', $row[2] ?? '0')),
                         'precio_unitario' => floatval(str_replace(['$', '.'], '', $row[3] ?? '0')),
                         'total' => floatval(str_replace(['$', '.'], '', $row[4] ?? '0')),
-                        'forma_pago' => $row[5] ?? '',
-                        'cliente' => $row[6] ?? '',
-                        'placa' => $row[7] ?? '',
-                        'cajero' => $row[8] ?? '',
+                        'forma_pago' => $hasFormaPago ? ($row[5] ?? '') : '',
+                        'cliente' => $hasFormaPago ? ($row[6] ?? '') : ($row[5] ?? ''),
+                        'cliente_doc' => '',
+                        'placa' => $hasFormaPago ? ($row[7] ?? '') : ($row[6] ?? ''),
+                        'cajero' => $hasFormaPago ? ($row[8] ?? '') : ($row[7] ?? ''),
                     ];
                 }
             }
@@ -315,7 +468,7 @@ try {
                 echo json_encode(['success' => false, 'error' => 'Row invalida']);
                 exit;
             }
-            lub_delete_row(LUB_HOJA_VENTAS, $row, 9);
+            lub_delete_row(LUB_HOJA_VENTAS, $row, 11);
             echo json_encode(['success' => true, 'message' => 'Venta eliminada']);
             exit;
 
@@ -323,7 +476,9 @@ try {
             ensure_headers(LUB_HOJA_ENTRADAS, LUB_HEADERS_ENTRADAS);
             $now = date('d/m/Y H:i');
             $producto = $input['producto'] ?? '';
+            $presentacion = trim($input['presentacion'] ?? '');
             $cantidad = floatval($input['cantidad'] ?? 0);
+            $precioVentaInput = floatval(str_replace(['$', '.'], '', trim($input['precio_venta'] ?? '')));
             $values = [
                 $now,
                 $producto,
@@ -337,21 +492,30 @@ try {
             if ($result['code'] === 200) {
                 $resultDatos = lub_get_all(LUB_HOJA_DATOS);
                 if (isset($resultDatos['data']['values'])) {
+                    $actualizado = false;
                     foreach ($resultDatos['data']['values'] as $i => $row) {
                         if ($i === 0) continue;
-                        if (($row[0] ?? '') === $producto) {
-                            $rowNum = $i + 1;
-                            $stockActual = floatval($row[3] ?? 0);
-                            $nuevoStock = $stockActual + $cantidad;
-                            lub_update(LUB_HOJA_DATOS, $rowNum, [
-                                $row[0] ?? '',
-                                $row[1] ?? '',
-                                $row[2] ?? '',
-                                $nuevoStock,
-                                $row[4] ?? 'TRUE',
-                            ]);
-                            break;
-                        }
+                        $coincideProducto = trim($row[0] ?? '') === $producto;
+                        if (!$coincideProducto) continue;
+                        // Si se envió presentación, solo actualizar la fila exacta (nombre + presentación)
+                        if ($presentacion !== '' && trim($row[1] ?? '') !== $presentacion) continue;
+                        $rowNum = $i + 1;
+                        $stockActual = floatval($row[3] ?? 0);
+                        $nuevoStock = $stockActual + $cantidad;
+                        $nuevoPrecio = $precioVentaInput > 0 ? $precioVentaInput : floatval(str_replace(['$', '.'], '', $row[2] ?? '0'));
+                        lub_update(LUB_HOJA_DATOS, $rowNum, [
+                            $row[0] ?? '',
+                            $row[1] ?? '',
+                            $nuevoPrecio,
+                            $nuevoStock,
+                            $row[4] ?? 'TRUE',
+                        ]);
+                        $actualizado = true;
+                        break;
+                    }
+                    if (!$actualizado && $presentacion !== '') {
+                        // No existía la combinación exacta: registra igual el ingreso (se regulará luego)
+                        error_log('Entrada sin fila exacta en datos: ' . $producto . ' [' . $presentacion . ']');
                     }
                 }
                 echo json_encode(['success' => true, 'message' => 'Entrada registrada']);
@@ -415,6 +579,7 @@ try {
 
         case 'resumen_dia':
             $hoy = date('d/m/Y');
+            $hoyShort = date('j/n/Y');
             $resultVentas = lub_get_all(LUB_HOJA_VENTAS);
             $resultEntradas = lub_get_all(LUB_HOJA_ENTRADAS);
             $totalVentas = 0;
@@ -426,9 +591,11 @@ try {
                 foreach ($resultVentas['data']['values'] as $i => $row) {
                     if ($i === 0) continue;
                     $fecha = $row[0] ?? '';
-                    if (strpos($fecha, $hoy) !== false) {
-                        $totalVentas += floatval(str_replace(['$', '.'], '', $row[4] ?? '0'));
-                        $totalItems += floatval($row[2] ?? 0);
+                    if (strpos($fecha, $hoy) !== false || strpos($fecha, $hoyShort) !== false) {
+                        $idxCant = count($row) >= 10 ? 3 : 2;
+                        $idxTotal = count($row) >= 10 ? 5 : 4;
+                        $totalVentas += floatval(str_replace(['$', '.'], '', $row[$idxTotal] ?? '0'));
+                        $totalItems += floatval($row[$idxCant] ?? 0);
                         $numVentas++;
                     }
                 }
@@ -437,7 +604,7 @@ try {
                 foreach ($resultEntradas['data']['values'] as $i => $row) {
                     if ($i === 0) continue;
                     $fecha = $row[0] ?? '';
-                    if (strpos($fecha, $hoy) !== false) {
+                    if (strpos($fecha, $hoy) !== false || strpos($fecha, $hoyShort) !== false) {
                         $totalEntradas++;
                     }
                 }
@@ -448,6 +615,103 @@ try {
                 'num_ventas' => $numVentas,
                 'total_entradas' => $totalEntradas,
             ]]);
+            exit;
+
+        case 'listar_clientes':
+            lub_ensure_sheet(LUB_HOJA_CLIENTES);
+            ensure_headers(LUB_HOJA_CLIENTES, LUB_HEADERS_CLIENTES);
+            $res = lub_get_all(LUB_HOJA_CLIENTES);
+            $clientes = [];
+            if (isset($res['data']['values'])) {
+                foreach ($res['data']['values'] as $i => $row) {
+                    if ($i === 0) continue;
+                    if (trim($row[0] ?? '') === '' && trim($row[1] ?? '') === '') continue;
+                    $clientes[] = [
+                        'row' => $i + 1,
+                        'identificacion' => $row[0] ?? '',
+                        'nombres' => $row[1] ?? '',
+                        'telefono' => $row[2] ?? '',
+                        'correo' => $row[3] ?? '',
+                        'direccion' => $row[4] ?? '',
+                        'placa1' => $row[5] ?? '',
+                        'placa2' => $row[6] ?? '',
+                        'placa3' => $row[7] ?? '',
+                        'placa4' => $row[8] ?? '',
+                        'notas' => $row[9] ?? '',
+                    ];
+                }
+            }
+            echo json_encode(['success' => true, 'data' => $clientes]);
+            exit;
+
+        case 'registrar_cliente':
+            lub_ensure_sheet(LUB_HOJA_CLIENTES);
+            ensure_headers(LUB_HOJA_CLIENTES, LUB_HEADERS_CLIENTES);
+            $identificacion = trim($input['identificacion'] ?? '');
+            $nombres = trim($input['nombres'] ?? '');
+            $telefono = trim($input['telefono'] ?? '');
+            if ($identificacion === '' || $nombres === '' || $telefono === '') {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Identificación, nombres y teléfono son requeridos']);
+                exit;
+            }
+            $res = lub_get_all(LUB_HOJA_CLIENTES);
+            if (isset($res['data']['values'])) {
+                foreach ($res['data']['values'] as $i => $row) {
+                    if ($i === 0) continue;
+                    if (strtolower(trim($row[0] ?? '')) === strtolower($identificacion)) {
+                        http_response_code(409);
+                        echo json_encode(['success' => false, 'error' => 'Ya existe un cliente con esa identificación']);
+                        exit;
+                    }
+                }
+            }
+            $values = [
+                $identificacion, $nombres, $telefono,
+                $input['correo'] ?? '', $input['direccion'] ?? '',
+                $input['placa1'] ?? '', $input['placa2'] ?? '', $input['placa3'] ?? '', $input['placa4'] ?? '',
+                $input['notas'] ?? '',
+            ];
+            $result = lub_append(LUB_HOJA_CLIENTES, $values);
+            if ($result['code'] === 200) {
+                echo json_encode(['success' => true, 'message' => 'Cliente registrado']);
+            } else {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Error al registrar cliente']);
+            }
+            exit;
+
+        case 'actualizar_cliente':
+            lub_ensure_sheet(LUB_HOJA_CLIENTES);
+            ensure_headers(LUB_HOJA_CLIENTES, LUB_HEADERS_CLIENTES);
+            $row = intval($input['row'] ?? 0);
+            if ($row < 2) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Row invalida']);
+                exit;
+            }
+            $values = [
+                $input['identificacion'] ?? '',
+                $input['nombres'] ?? '',
+                $input['telefono'] ?? '',
+                $input['correo'] ?? '',
+                $input['direccion'] ?? '',
+                $input['placa1'] ?? '', $input['placa2'] ?? '', $input['placa3'] ?? '', $input['placa4'] ?? '',
+                $input['notas'] ?? '',
+            ];
+            lub_update(LUB_HOJA_CLIENTES, $row, $values);
+            echo json_encode(['success' => true, 'message' => 'Cliente actualizado']);
+            exit;
+
+        case 'eliminar_cliente':
+            $row = intval($input['row'] ?? 0);
+            if ($row < 2) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Row invalida']);
+                exit;
+            }
+            lub_delete_row(LUB_HOJA_CLIENTES, $row, 10);
+            echo json_encode(['success' => true, 'message' => 'Cliente eliminado']);
             exit;
 
         case 'login':
