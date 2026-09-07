@@ -36,11 +36,21 @@ function lub_get_token() {
     return $resp['access_token'] ?? null;
 }
 
+function lub_active_sheet() {
+    return (isset($GLOBALS['LUB_ACTIVE_SHEET']) && $GLOBALS['LUB_ACTIVE_SHEET'] !== '')
+        ? $GLOBALS['LUB_ACTIVE_SHEET']
+        : LUB_SPREADSHEET_ID;
+}
+
+function lub_values_api() {
+    return 'https://sheets.googleapis.com/v4/spreadsheets/' . lub_active_sheet() . '/values/';
+}
+
 function lub_request($method, $range, $body = null) {
     $token = lub_get_token();
     if (!$token) return ['error' => 'No se pudo obtener token de acceso'];
 
-    $url = LUB_SHEETS_API . urlencode($range);
+    $url = lub_values_api() . urlencode($range);
     $ch = curl_init($url);
     $headers = [
         'Authorization: Bearer ' . $token,
@@ -75,7 +85,7 @@ function lub_ensure_sheet($title) {
     if (($check['code'] ?? 0) === 200) return true;
     $token = lub_get_token();
     if (!$token) return false;
-    $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . LUB_SPREADSHEET_ID . '/:batchUpdate';
+    $url = 'https://sheets.googleapis.com/v4/spreadsheets/' . lub_active_sheet() . '/:batchUpdate';
     $body = json_encode(['requests' => [['addSheet' => ['properties' => ['title' => $title]]]]]);
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -96,7 +106,7 @@ function lub_ensure_sheet($title) {
 function lub_append($sheet, $values) {
     $body = ['values' => [$values]];
     $range = $sheet . '!A:H';
-    $url = LUB_SHEETS_API . urlencode($range) . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
+    $url = lub_values_api() . urlencode($range) . ':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS';
     $token = lub_get_token();
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -119,7 +129,7 @@ function lub_update($sheet, $row, $values) {
     $range = $sheet . '!A' . $row . ':' . $cols . $row;
     $body = ['values' => [$values]];
     $token = lub_get_token();
-    $url = LUB_SHEETS_API . urlencode($range) . '?valueInputOption=USER_ENTERED';
+    $url = lub_values_api() . urlencode($range) . '?valueInputOption=USER_ENTERED';
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_CUSTOMREQUEST  => 'PUT',

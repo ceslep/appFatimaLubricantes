@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { vistaActual, usuario, logout } from '../stores';
+  import { vistaActual, usuario, logout, negocio, setNegocio } from '../stores';
+  import { NEGOCIOS } from '../negocios';
   import type { VistaActual } from '../types';
   import Icon from './ui/Icon.svelte';
 
@@ -64,6 +65,13 @@
     onclose();
   }
 
+  function cambiarNegocio(e: Event) {
+    const id = (e.target as HTMLSelectElement).value;
+    setNegocio(id);
+    vistaActual.set('dashboard');
+    onclose();
+  }
+
   function cerrarSesion() {
     logout();
     vistaActual.set('dashboard');
@@ -112,6 +120,26 @@
     <div class="min-w-0 leading-tight">
       <h2 class="font-bold text-[15px] text-slate-900 tracking-tight truncate">Estación Fátima</h2>
       <p class="text-[11px] font-medium text-slate-400 truncate">Lubricantes &middot; Punto de venta</p>
+    </div>
+  </div>
+
+  <!-- Selector de negocio -->
+  <div class="px-3 pb-3">
+    <label class="field-label !mb-1.5" for="sel-negocio">Negocio</label>
+    <div class="relative">
+      <select
+        id="sel-negocio"
+        value={$negocio}
+        onchange={cambiarNegocio}
+        class="input-base appearance-none pr-9 cursor-pointer"
+      >
+        {#each NEGOCIOS as n}
+          <option value={n.id}>{n.nombre}</option>
+        {/each}
+      </select>
+      <span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+        <Icon name="chevron-down" class="w-4 h-4" />
+      </span>
     </div>
   </div>
 

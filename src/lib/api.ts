@@ -1,7 +1,26 @@
 const API_BASE = 'https://app.iedeoccidente.com/appf/lubricantes_api.php';
 
+// Datos compartidos entre negocios (usuarios y clientes) viven en el spreadsheet principal
+const ACCIONES_COMPARTIDAS = new Set([
+  'login',
+  'listar_usuarios',
+  'crear_usuario',
+  'update_usuario',
+  'eliminar_usuario',
+  'listar_clientes',
+  'registrar_cliente',
+  'actualizar_cliente',
+  'eliminar_cliente',
+]);
+
+function negocioActual(): string {
+  const n = localStorage.getItem('lub_negocio');
+  return n === 'otro' ? n : 'estacion';
+}
+
 async function apiCall(action: string, params: Record<string, unknown> = {}, method: string = 'GET'): Promise<unknown> {
-  let url = `${API_BASE}?action=${action}`;
+  const negocio = ACCIONES_COMPARTIDAS.has(action) ? 'estacion' : negocioActual();
+  let url = `${API_BASE}?action=${action}&negocio=${encodeURIComponent(negocio)}`;
   let body: string | undefined;
 
   if (method === 'GET') {

@@ -16,6 +16,21 @@ $action = $_GET['action'] ?? '';
 $method = $_SERVER['REQUEST_METHOD'];
 $input = json_decode(file_get_contents('php://input'), true);
 
+// ---- Multi-negocio: cada negocio usa su propio spreadsheet ----
+$lub_negocios = [
+    'estacion' => LUB_SPREADSHEET_ID,
+    'otro'     => '1f9EfI03bDXehvF9cGEdbU2KHsS3BHMDxGQU7wsf8BQA',
+];
+$negocioSolicitado = strtolower(trim($_GET['negocio'] ?? 'estacion'));
+if (!array_key_exists($negocioSolicitado, $lub_negocios)) $negocioSolicitado = 'estacion';
+$GLOBALS['LUB_ACTIVE_SHEET'] = $lub_negocios[$negocioSolicitado];
+
+// Datos compartidos entre negocios: usuarios y clientes viven en el spreadsheet principal
+$lub_shared = ['login', 'listar_usuarios', 'crear_usuario', 'update_usuario', 'eliminar_usuario', 'listar_clientes', 'registrar_cliente', 'actualizar_cliente', 'eliminar_cliente'];
+if (in_array($action, $lub_shared)) {
+    $GLOBALS['LUB_ACTIVE_SHEET'] = LUB_SPREADSHEET_ID;
+}
+
 function ensure_headers($sheet, $headers) {
     $check = lub_get($sheet, 'A1:H1');
     if (!isset($check['data']['values'][0]) || empty($check['data']['values'][0][0])) {

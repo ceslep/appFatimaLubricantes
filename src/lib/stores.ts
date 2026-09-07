@@ -3,6 +3,7 @@ import type { UsuarioLogueado, VistaActual, Venta, Entrada, ProductoCatalogo } f
 
 export const usuario = writable<UsuarioLogueado | null>(null);
 export const vistaActual = writable<VistaActual>('dashboard');
+export const negocio = writable<string>('estacion');
 export const ventas = writable<Venta[]>([]);
 export const entradas = writable<Entrada[]>([]);
 export const catalogo = writable<ProductoCatalogo[]>([]);
@@ -28,4 +29,14 @@ export function restoreSession() {
       usuario.set(JSON.parse(saved));
     } catch { /* ignore */ }
   }
+}
+
+export function restoreNegocio() {
+  const n = localStorage.getItem('lub_negocio');
+  if (n) negocio.set(n);
+}
+
+export function setNegocio(id: string) {
+  negocio.set(id);
+  localStorage.setItem('lub_negocio', id);
 }
