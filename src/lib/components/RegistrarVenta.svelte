@@ -53,6 +53,8 @@
   let errorCliente = $state('');
   let formCliente = $state({ identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', notas: '' });
   let intentoEnvioCliente = $state(false);
+  let verificandoDocCliente = $state(false);
+  let docExistenteCliente = $state(false);
 
   function requeridoCliente(e: EstadoValidacion, msg: string): EstadoValidacion {
     if (intentoEnvioCliente && e.estado === 'vacio') return { estado: 'error', mensaje: msg };
@@ -60,12 +62,20 @@
   }
 
   // Validación en vivo mientras se escribe
-  let estClId = $derived(requeridoCliente(estadoDocumento(formCliente.identificacion), 'Ingresa la identificación.'));
+  let estClIdBase = $derived(requeridoCliente(estadoDocumento(formCliente.identificacion), 'Ingresa la identificación.'));
+  let estClId = $derived<EstadoValidacion>(
+    docExistenteCliente
+      ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
+      : verificandoDocCliente
+        ? { estado: 'parcial', mensaje: 'Verificando identificación…' }
+        : estClIdBase
+  );
   let estClTel = $derived(requeridoCliente(estadoTelefono(formCliente.telefono), 'Ingresa el celular.'));
   let estClNom = $derived(requeridoCliente(estadoNombres(formCliente.nombres), 'Ingresa el nombre completo.'));
   let estClCor = $derived(estadoCorreo(formCliente.correo));
   let formularioClienteValido = $derived(
     estClId.estado === 'ok' && estClTel.estado === 'ok' && estClNom.estado === 'ok' && estClCor.estado !== 'error'
+    && !docExistenteCliente && !verificandoDocCliente
   );
 
   function claseEstado(estado: EstadoCampo): string {
@@ -248,6 +258,23 @@
     const limpio = limitarDocumento(el.value);
     el.value = limpio;
     formCliente.identificacion = limpio;
+    docExistenteCliente = false;
+    verificandoDocCliente = false;
+  }
+
+  // Al salir del campo: verifica si la identificación ya está registrada
+  async function verificarDocumentoCliente() {
+    const r = validarDocumento(formCliente.identificacion);
+    docExistenteCliente = false;
+    if (!r.valido) return;
+    verificandoDocCliente = true;
+    try {
+      const res = await api.clienteExiste(r.valorNormalizado);
+      docExistenteCliente = res.existe;
+    } catch (e) {
+      console.error(e);
+    }
+    verificandoDocCliente = false;
   }
 
   function abrirModalCliente() {
@@ -615,7 +642,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="field-label" for="rv-cl-id">Identificación *</label>
-            <input id="rv-cl-id" type="text" inputmode="numeric" maxlength="12" value={formCliente.identificacion} oninput={onDocClienteInput} placeholder="Cédula o NIT" class="input-base" autocomplete="off" style={bordeEstado(estClId)} aria-invalid={estClId.estado === 'error'} />
+            <input id="rv-cl-id" type="text" inputmode="numeric" maxlength="12" value={formCliente.identificacion} oninput={onDocClienteInput} onblur={verificarDocumentoCliente} placeholder="Cédula o NIT" class="input-base" autocomplete="off" style={bordeEstado(estClId)} aria-invalid={estClId.estado === 'error'} />
             {@render estadoLinea(estClId, 'Cédula de 10 dígitos o NIT con guion.')}
           </div>
           <div>

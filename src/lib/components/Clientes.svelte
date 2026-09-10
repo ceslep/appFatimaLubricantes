@@ -17,6 +17,8 @@
   let guardando = $state(false);
   let error = $state('');
   let intentoEnvio = $state(false);
+  let verificandoDoc = $state(false);
+  let docExistente = $state(false);
 
   let form = $state({ identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', notas: '', placa1: '', placa2: '', placa3: '', placa4: '' });
 
@@ -26,7 +28,14 @@
   }
 
   // Validación en vivo mientras se escribe
-  let estId = $derived(requerido(estadoDocumento(form.identificacion), 'Ingresa la identificación.'));
+  let estIdBase = $derived(requerido(estadoDocumento(form.identificacion), 'Ingresa la identificación.'));
+  let estId = $derived<EstadoValidacion>(
+    docExistente
+      ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
+      : verificandoDoc
+        ? { estado: 'parcial', mensaje: 'Verificando identificación…' }
+        : estIdBase
+  );
   let estTel = $derived(requerido(estadoTelefono(form.telefono), 'Ingresa el celular.'));
   let estNom = $derived(requerido(estadoNombres(form.nombres), 'Ingresa el nombre completo.'));
   let estCor = $derived(estadoCorreo(form.correo));
@@ -39,6 +48,7 @@
     && estCor.estado !== 'error'
     && estPlaca1.estado !== 'error' && estPlaca2.estado !== 'error'
     && estPlaca3.estado !== 'error' && estPlaca4.estado !== 'error'
+    && !docExistente && !verificandoDoc
   );
 
   function claseEstado(estado: EstadoCampo): string {
@@ -91,6 +101,25 @@
     const limpio = limitarDocumento(el.value);
     el.value = limpio;
     form.identificacion = limpio;
+    docExistente = false;
+    verificandoDoc = false;
+  }
+
+  // Al salir del campo: verifica si la identificación ya está registrada
+  async function verificarDocumento() {
+    const r = validarDocumento(form.identificacion);
+    docExistente = false;
+    if (!r.valido) return;
+    // Al editar el mismo cliente no se considera duplicado
+    if (editando && validarDocumento(editando.identificacion).valorNormalizado === r.valorNormalizado) return;
+    verificandoDoc = true;
+    try {
+      const res = await api.clienteExiste(r.valorNormalizado);
+      docExistente = res.existe;
+    } catch (e) {
+      console.error(e);
+    }
+    verificandoDoc = false;
   }
 
   function onTelInput(e: Event) {
@@ -319,7 +348,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label class="field-label" for="cl-id">Identificación *</label>
-        <input id="cl-id" type="text" inputmode="numeric" maxlength="12" value={form.identificacion} oninput={onDocInput} placeholder="Cédula o NIT" class="input-base" autocomplete="off" style={bordeEstado(estId)} aria-invalid={estId.estado === 'error'} />
+        <input id="cl-id" type="text" inputmode="numeric" maxlength="12" value={form.identificacion} oninput={onDocInput} onblur={verificarDocumento} placeholder="Cédula o NIT" class="input-base" autocomplete="off" style={bordeEstado(estId)} aria-invalid={estId.estado === 'error'} />
         {@render estadoLinea(estId, 'Cédula de 10 dígitos o NIT con guion (900123456-7).')}
       </div>
       <div>

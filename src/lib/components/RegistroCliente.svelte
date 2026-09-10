@@ -17,6 +17,8 @@
   let error = $state('');
   let exito = $state(false);
   let intentoEnvio = $state(false);
+  let verificandoDoc = $state(false);
+  let docExistente = $state(false);
 
   let form = $state({ identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', placa1: '' });
 
@@ -26,7 +28,14 @@
   }
 
   // Validación en vivo mientras se escribe
-  let estId = $derived(requerido(estadoDocumento(form.identificacion), 'Ingresa la identificación.'));
+  let estIdBase = $derived(requerido(estadoDocumento(form.identificacion), 'Ingresa la identificación.'));
+  let estId = $derived<EstadoValidacion>(
+    docExistente
+      ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
+      : verificandoDoc
+        ? { estado: 'parcial', mensaje: 'Verificando identificación…' }
+        : estIdBase
+  );
   let estTel = $derived(requerido(estadoTelefono(form.telefono), 'Ingresa el celular.'));
   let estNom = $derived(requerido(estadoNombres(form.nombres), 'Ingresa el nombre completo.'));
   let estCor = $derived(requerido(estadoCorreo(form.correo), 'Ingresa el correo electrónico.'));
@@ -35,6 +44,7 @@
   let formularioValido = $derived(
     estId.estado === 'ok' && estTel.estado === 'ok' && estNom.estado === 'ok'
     && estCor.estado === 'ok' && estPlaca.estado === 'ok'
+    && !docExistente && !verificandoDoc
   );
 
   function claseEstado(estado: EstadoCampo): string {
@@ -72,6 +82,23 @@
     const limpio = limitarDocumento(el.value);
     el.value = limpio;
     form.identificacion = limpio;
+    docExistente = false;
+    verificandoDoc = false;
+  }
+
+  // Al salir del campo: consulta si la identificación ya está registrada
+  async function verificarDocumento() {
+    const r = validarDocumento(form.identificacion);
+    docExistente = false;
+    if (!r.valido) return;
+    verificandoDoc = true;
+    try {
+      const res = await api.clienteExiste(r.valorNormalizado);
+      docExistente = res.existe;
+    } catch (e) {
+      console.error(e);
+    }
+    verificandoDoc = false;
   }
 
   function onTelInput(e: Event) {
@@ -228,6 +255,7 @@
                     placeholder="Cédula o NIT"
                     value={form.identificacion}
                     oninput={onDocInput}
+                    onblur={verificarDocumento}
                     autocomplete="off"
                     style={bordeEstado(estId)}
                     aria-invalid={estId.estado === 'error'}

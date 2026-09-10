@@ -26,7 +26,7 @@ if (!array_key_exists($negocioSolicitado, $lub_negocios)) $negocioSolicitado = '
 $GLOBALS['LUB_ACTIVE_SHEET'] = $lub_negocios[$negocioSolicitado];
 
 // Datos compartidos entre negocios: usuarios y clientes viven en el spreadsheet principal
-$lub_shared = ['login', 'listar_usuarios', 'crear_usuario', 'update_usuario', 'eliminar_usuario', 'listar_clientes', 'registrar_cliente', 'actualizar_cliente', 'eliminar_cliente'];
+$lub_shared = ['login', 'listar_usuarios', 'crear_usuario', 'update_usuario', 'eliminar_usuario', 'listar_clientes', 'cliente_existe', 'registrar_cliente', 'actualizar_cliente', 'eliminar_cliente'];
 if (in_array($action, $lub_shared)) {
     $GLOBALS['LUB_ACTIVE_SHEET'] = LUB_SPREADSHEET_ID;
 }
@@ -716,6 +716,24 @@ try {
                 }
             }
             echo json_encode(['success' => true, 'data' => $clientes]);
+            exit;
+
+        case 'cliente_existe':
+            // Verifica si una identificación ya está registrada (sin exponer la lista de clientes).
+            lub_ensure_sheet(LUB_HOJA_CLIENTES);
+            ensure_headers(LUB_HOJA_CLIENTES, LUB_HEADERS_CLIENTES);
+            $docBuscar = strtolower(trim((string)($_GET['identificacion'] ?? '')));
+            $existeCliente = false;
+            if ($docBuscar !== '') {
+                $resExiste = lub_get_all(LUB_HOJA_CLIENTES);
+                if (isset($resExiste['data']['values'])) {
+                    foreach ($resExiste['data']['values'] as $i => $row) {
+                        if ($i === 0) continue;
+                        if (strtolower(trim($row[0] ?? '')) === $docBuscar) { $existeCliente = true; break; }
+                    }
+                }
+            }
+            echo json_encode(['success' => true, 'data' => ['existe' => $existeCliente]]);
             exit;
 
         case 'registrar_cliente':
