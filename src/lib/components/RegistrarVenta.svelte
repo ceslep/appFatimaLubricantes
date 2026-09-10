@@ -661,6 +661,12 @@
           <input id="rv-cl-cor" type="email" bind:value={formCliente.correo} placeholder="cliente@correo.com" class="input-base" autocomplete="off" style={bordeEstado(estClCor)} aria-invalid={estClCor.estado === 'error'} />
           {@render estadoLinea(estClCor, 'Opcional.')}
         </div>
+        {#if docExistenteCliente}
+          <div class="notice-error" role="alert">
+            <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
+            <span><strong>El cliente ya existe.</strong> Esa identificación ya está registrada.</span>
+          </div>
+        {/if}
         {#if errorCliente}
           <p class="text-[13px] text-rose-600">{errorCliente}</p>
         {/if}

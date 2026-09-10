@@ -342,7 +342,12 @@
             </div>
           </div>
 
-          {#if error}
+          {#if docExistente}
+            <div class="notice-error" role="alert">
+              <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
+              <span><strong>El cliente ya existe.</strong> La identificación {form.identificacion} ya está registrada, no es posible registrarla de nuevo.</span>
+            </div>
+          {:else if error}
             <div class="notice-error" role="alert">
               <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
               <span>{error}</span>

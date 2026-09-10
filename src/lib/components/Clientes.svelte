@@ -399,6 +399,12 @@
       <label class="field-label" for="cl-notas">Observaciones</label>
       <input id="cl-notas" type="text" bind:value={form.notas} placeholder="Observaciones (opcional)" class="input-base" autocomplete="off" />
     </div>
+    {#if docExistente}
+      <div class="notice-error" role="alert">
+        <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
+        <span><strong>El cliente ya existe.</strong> Esa identificación ya está registrada.</span>
+      </div>
+    {/if}
     {#if error}
       <p class="text-[13px] text-rose-600">{error}</p>
     {/if}
