@@ -30,7 +30,7 @@
   }
 
   // Validación en vivo mientras se escribe
-  let estIdBase = $derived(requerido(estadoDocumento(form.identificacion), 'Ingresa la identificación.'));
+  let estIdBase = $derived(requerido(estadoDocumento(form.identificacion, 6), 'Ingresa la identificación.'));
   let estId = $derived<EstadoValidacion>(
     docExistente
       ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
@@ -91,7 +91,7 @@
 
   // Al salir del campo: consulta si la identificación ya está registrada
   async function verificarDocumento() {
-    const r = validarDocumento(form.identificacion);
+    const r = validarDocumento(form.identificacion, 6);
     docExistente = false;
     if (!r.valido) return;
     verificandoDoc = true;
@@ -137,7 +137,7 @@
       error = 'Revisa los campos marcados.';
       return;
     }
-    const doc = validarDocumento(form.identificacion);
+    const doc = validarDocumento(form.identificacion, 6);
     const tel = validarTelefonoCO(form.telefono);
     const placa = validarPlaca(form.placa1, false);
     enviando = true;
@@ -265,7 +265,7 @@
                     aria-invalid={estId.estado === 'error'}
                   />
                 </div>
-                {@render estadoLinea(estId, 'Cédula de 10 dígitos o NIT con guion (900123456-7).')}
+                {@render estadoLinea(estId, 'Cédula de 6 a 10 dígitos o NIT con guion (900123456-7).')}
               </div>
               <div>
                 <label class="field-label" for="reg-tel">Teléfono / WhatsApp *</label>
