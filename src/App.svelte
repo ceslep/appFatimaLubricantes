@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { isLoggedIn, isVentas, vistaActual, usuario, restoreSession, restoreNegocio, negocio } from './lib/stores';
+  import { isLoggedIn, isVentas, vistaActual, usuario, restoreSession, restoreNegocio, negocio, logo, restoreLogo, setLogo, modoTablet, setModoTablet, restoreModoTablet } from './lib/stores';
+  import { api } from './lib/api';
   import { NEGOCIOS, nombreNegocio } from './lib/negocios';
   import Login from './lib/components/Login.svelte';
+  import RegistroCliente from './lib/components/RegistroCliente.svelte';
+  import { esRegistroPublico } from './lib/utils';
   import Sidebar from './lib/components/Sidebar.svelte';
   import Dashboard from './lib/components/Dashboard.svelte';
   import RegistrarVenta from './lib/components/RegistrarVenta.svelte';
@@ -10,6 +13,7 @@
   import Inventario from './lib/components/Inventario.svelte';
   import Historial from './lib/components/Historial.svelte';
   import HistorialEntradas from './lib/components/HistorialEntradas.svelte';
+  import HistorialSalidas from './lib/components/HistorialSalidas.svelte';
   import AdminUsuarios from './lib/components/AdminUsuarios.svelte';
   import Reportes from './lib/components/Reportes.svelte';
   import Configuracion from './lib/components/Configuracion.svelte';
@@ -17,6 +21,8 @@
   import Icon from './lib/components/ui/Icon.svelte';
 
   let menuOpen = $state(false);
+  // Página pública de registro (?registro=1): se muestra sin iniciar sesión.
+  let modoRegistro = $state(esRegistroPublico());
 
   const vistas: Record<string, string> = {
     'dashboard': 'Dashboard',
@@ -25,6 +31,7 @@
     'inventario': 'Inventario',
     'historial': 'Historial Ventas',
     'historial-entradas': 'Historial Entradas',
+    'historial-salidas': 'Salidas de inventario',
     'reportes': 'Reportes y estadísticas',
     'clientes': 'Clientes',
     'admin-usuarios': 'Usuarios',
@@ -38,6 +45,7 @@
     'inventario': 'droplet',
     'historial': 'receipt',
     'historial-entradas': 'history',
+    'historial-salidas': 'arrow-up-right',
     'reportes': 'chart',
     'clientes': 'users',
     'admin-usuarios': 'users',
@@ -70,6 +78,9 @@
   onMount(() => {
     restoreSession();
     restoreNegocio();
+    restoreLogo();
+    restoreModoTablet();
+    void cargarLogo();
     setTimeout(() => {
       const sub = isVentas.subscribe((v) => {
         if (v) vistaActual.set('registrar-venta');
@@ -77,12 +88,32 @@
       return sub;
     }, 0);
   });
+
+  // Trae el logo configurado (desde la config del negocio o la pública de registro).
+  async function cargarLogo() {
+    try {
+      const cfg = modoRegistro ? await api.obtenerConfigPublica() : await api.obtenerConfig();
+      setLogo(cfg.logo_data || '');
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // Usa el logo como favicon cuando exista.
+  $effect(() => {
+    const actual = $logo;
+    if (!actual) return;
+    const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (link) link.href = actual;
+  });
 </script>
 
-{#if !$isLoggedIn}
+{#if modoRegistro}
+  <RegistroCliente />
+{:else if !$isLoggedIn}
   <Login />
 {:else}
-  <div class="flex h-dvh overflow-hidden">
+  <div class="flex h-dvh overflow-hidden {$modoTablet && $usuario?.rol !== 'admin' ? 'modo-tablet' : ''}">
     <Sidebar open={menuOpen} onclose={() => (menuOpen = false)} />
 
     <div class="flex-1 min-w-0 flex flex-col">
@@ -107,6 +138,19 @@
         </div>
 
         <div class="ml-auto flex items-center gap-2 sm:gap-3">
+          {#if $usuario && $usuario.rol !== 'admin'}
+            <button
+              type="button"
+              onclick={() => setModoTablet(!$modoTablet)}
+              aria-pressed={$modoTablet}
+              title="Modo tablet: botones grandes para pantallas táctiles"
+              class="toque inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ring-1 ring-inset transition-colors cursor-pointer
+                {$modoTablet ? 'bg-blue-600 text-white ring-blue-600' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'}"
+            >
+              <Icon name="tablet" class="w-4 h-4 shrink-0" />
+              <span class="hidden sm:inline">Modo tablet</span>
+            </button>
+          {/if}
           <span class="inline-flex items-center gap-1.5 max-w-[130px] sm:max-w-none text-[11.5px] sm:text-[12.5px] font-semibold text-blue-700 bg-blue-50 ring-1 ring-inset ring-blue-100 rounded-full pl-2.5 pr-3 py-1.5 truncate">
             <Icon name="droplet" class="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <span class="truncate">{nombreNegocio($negocio)}</span>
@@ -141,6 +185,8 @@
             <Historial />
           {:else if $vistaActual === 'historial-entradas'}
             <HistorialEntradas />
+          {:else if $vistaActual === 'historial-salidas'}
+            <HistorialSalidas />
           {:else if $vistaActual === 'reportes'}
             <Reportes />
           {:else if $vistaActual === 'admin-usuarios'}

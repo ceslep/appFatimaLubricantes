@@ -5,6 +5,7 @@
   import Button from './ui/Button.svelte';
   import Modal from './ui/Modal.svelte';
   import Icon from './ui/Icon.svelte';
+  import { validarDocumento, validarTelefonoCO, validarPlaca, limitarPlaca, estadoDocumento, estadoTelefono, estadoPlaca, estadoNombres, estadoCorreo, limitarDocumento, limitarNombres, validarNombres, type EstadoCampo, type EstadoValidacion } from '../validaciones';
   import type { Cliente } from '../types';
 
   let clientes = $state<Cliente[]>([]);
@@ -15,8 +16,44 @@
   let editando = $state<Cliente | null>(null);
   let guardando = $state(false);
   let error = $state('');
+  let intentoEnvio = $state(false);
 
   let form = $state({ identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', notas: '', placa1: '', placa2: '', placa3: '', placa4: '' });
+
+  function requerido(e: EstadoValidacion, msg: string): EstadoValidacion {
+    if (intentoEnvio && e.estado === 'vacio') return { estado: 'error', mensaje: msg };
+    return e;
+  }
+
+  // Validación en vivo mientras se escribe
+  let estId = $derived(requerido(estadoDocumento(form.identificacion), 'Ingresa la identificación.'));
+  let estTel = $derived(requerido(estadoTelefono(form.telefono), 'Ingresa el celular.'));
+  let estNom = $derived(requerido(estadoNombres(form.nombres), 'Ingresa el nombre completo.'));
+  let estCor = $derived(estadoCorreo(form.correo));
+  let estPlaca1 = $derived(estadoPlaca(form.placa1));
+  let estPlaca2 = $derived(estadoPlaca(form.placa2));
+  let estPlaca3 = $derived(estadoPlaca(form.placa3));
+  let estPlaca4 = $derived(estadoPlaca(form.placa4));
+  let formularioValido = $derived(
+    estId.estado === 'ok' && estTel.estado === 'ok' && estNom.estado === 'ok'
+    && estCor.estado !== 'error'
+    && estPlaca1.estado !== 'error' && estPlaca2.estado !== 'error'
+    && estPlaca3.estado !== 'error' && estPlaca4.estado !== 'error'
+  );
+
+  function claseEstado(estado: EstadoCampo): string {
+    if (estado === 'ok') return 'text-emerald-600';
+    if (estado === 'error') return 'text-rose-600';
+    if (estado === 'parcial') return 'text-amber-600';
+    return 'text-slate-400';
+  }
+
+  function bordeEstado(e: EstadoValidacion): string {
+    if (e.estado === 'error') return 'border-color:#fb7185';
+    if (e.estado === 'ok') return 'border-color:#34d399';
+    if (e.estado === 'parcial') return 'border-color:#fbbf24';
+    return '';
+  }
 
   let filtrados = $derived(
     filtro.trim()
@@ -37,6 +74,7 @@
     editando = null;
     form = { identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', notas: '', placa1: '', placa2: '', placa3: '', placa4: '' };
     error = '';
+    intentoEnvio = false;
     showModal = true;
   }
 
@@ -44,17 +82,54 @@
     editando = c;
     form = { identificacion: c.identificacion, nombres: c.nombres, telefono: c.telefono, correo: c.correo, direccion: c.direccion, notas: c.notas, placa1: c.placa1 || '', placa2: c.placa2 || '', placa3: c.placa3 || '', placa4: c.placa4 || '' };
     error = '';
+    intentoEnvio = false;
     showModal = true;
   }
 
+  function onDocInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement;
+    const limpio = limitarDocumento(el.value);
+    el.value = limpio;
+    form.identificacion = limpio;
+  }
+
+  function onTelInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement;
+    let v = el.value.replace(/[^\d+]/g, '');
+    const mas = v.startsWith('+');
+    v = v.replace(/\+/g, '');
+    if (mas) v = '+' + v;
+    v = v.slice(0, 13);
+    el.value = v;
+    form.telefono = v;
+  }
+
+  function onNomInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement;
+    const limpio = limitarNombres(el.value);
+    el.value = limpio;
+    form.nombres = limpio;
+  }
+
+  function onPlacaCampo(e: Event, campo: 'placa1' | 'placa2' | 'placa3' | 'placa4') {
+    const el = e.currentTarget as HTMLInputElement;
+    const limpio = limitarPlaca(el.value);
+    el.value = limpio;
+    form[campo] = limpio;
+  }
+
   async function guardar() {
-    // Normalizar placas a mayúsculas
-    for (const k of ['placa1', 'placa2', 'placa3', 'placa4'] as const) {
-      form[k] = (form[k] || '').trim().toUpperCase().replace(/\s+/g, '');
-    }
-    if (!form.identificacion.trim() || !form.nombres.trim() || !form.telefono.trim()) {
-      error = 'Identificación, nombres y teléfono son requeridos';
+    if (!formularioValido) {
+      intentoEnvio = true;
+      error = 'Revisa los campos marcados.';
       return;
+    }
+
+    form.identificacion = validarDocumento(form.identificacion).valorNormalizado;
+    form.nombres = validarNombres(form.nombres).valorNormalizado;
+    form.telefono = validarTelefonoCO(form.telefono).valorNormalizado;
+    for (const k of ['placa1', 'placa2', 'placa3', 'placa4'] as const) {
+      form[k] = validarPlaca(form[k] || '', false).valorNormalizado;
     }
     guardando = true;
     error = '';
@@ -86,6 +161,18 @@
   }
 </script>
 
+{#snippet estadoLinea(e: EstadoValidacion, ayuda: string)}
+  {#if e.estado === 'vacio'}
+    {#if ayuda}<p class="mt-1 text-[11px] text-slate-400">{ayuda}</p>{/if}
+  {:else if e.mensaje}
+    <p class="mt-1 text-[11.5px] {claseEstado(e.estado)} flex items-center gap-1">
+      {#if e.estado === 'ok'}<Icon name="check" class="w-3.5 h-3.5 shrink-0" strokeWidth={3} />{/if}
+      {#if e.estado === 'error'}<Icon name="alert" class="w-3.5 h-3.5 shrink-0" />{/if}
+      <span>{e.mensaje}</span>
+    </p>
+  {/if}
+{/snippet}
+
 <div class="space-y-5">
   <div class="flex flex-col sm:flex-row sm:items-center gap-3">
     <div class="flex items-center gap-3">
@@ -99,7 +186,7 @@
     </div>
     <button
       onclick={abrirNuevo}
-      class="inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2.5 sm:ml-auto
+      class="toque inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2.5 sm:ml-auto
         shadow-[0_1px_2px_rgba(30,64,175,0.35),0_6px_14px_-6px_rgba(37,99,235,0.5)]
         hover:bg-blue-700 active:scale-[0.98] transition-all cursor-pointer
         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
@@ -158,8 +245,8 @@
             </td>
             <td class="px-4 py-3.5 text-right whitespace-nowrap">
               <div class="flex items-center justify-end gap-1">
-                <button onclick={() => abrirEditar(c)} title="Editar" class="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"><Icon name="pencil" class="w-[17px] h-[17px]" /></button>
-                <button onclick={() => eliminar(c)} title="Eliminar" class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"><Icon name="trash" class="w-[17px] h-[17px]" /></button>
+                <button onclick={() => abrirEditar(c)} title="Editar" class="toque-icono p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"><Icon name="pencil" class="w-[17px] h-[17px]" /></button>
+                <button onclick={() => eliminar(c)} title="Eliminar" class="toque-icono p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"><Icon name="trash" class="w-[17px] h-[17px]" /></button>
               </div>
             </td>
           </tr>
@@ -181,7 +268,7 @@
               <p class="text-[11.5px] text-slate-400 font-mono truncate">{c.identificacion}</p>
               {#if c.notas}<p class="text-[11px] text-slate-400 truncate">{c.notas}</p>{/if}
             </div>
-            <button onclick={() => abrirEditar(c)} aria-label="Editar cliente" class="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer shrink-0"><Icon name="pencil" class="w-[18px] h-[18px]" /></button>
+            <button onclick={() => abrirEditar(c)} aria-label="Editar cliente" class="toque-icono p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer shrink-0"><Icon name="pencil" class="w-[18px] h-[18px]" /></button>
           </div>
 
           <div class="mt-3 grid grid-cols-2 gap-2.5">
@@ -211,7 +298,7 @@
           {/if}
 
           <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end">
-            <button onclick={() => eliminar(c)} class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
+            <button onclick={() => eliminar(c)} class="toque inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer">
               <Icon name="trash" class="w-3.5 h-3.5" />Eliminar
             </button>
           </div>
@@ -232,21 +319,25 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label class="field-label" for="cl-id">Identificación *</label>
-        <input id="cl-id" type="text" bind:value={form.identificacion} placeholder="Cédula o NIT" class="input-base" autocomplete="off" />
+        <input id="cl-id" type="text" inputmode="numeric" maxlength="12" value={form.identificacion} oninput={onDocInput} placeholder="Cédula o NIT" class="input-base" autocomplete="off" style={bordeEstado(estId)} aria-invalid={estId.estado === 'error'} />
+        {@render estadoLinea(estId, 'Cédula de 10 dígitos o NIT con guion (900123456-7).')}
       </div>
       <div>
         <label class="field-label" for="cl-tel">Teléfono / WhatsApp *</label>
-        <input id="cl-tel" type="tel" inputmode="numeric" bind:value={form.telefono} placeholder="Ej: 3001234567" class="input-base" autocomplete="tel" />
+        <input id="cl-tel" type="tel" inputmode="numeric" value={form.telefono} oninput={onTelInput} placeholder="3001234567" class="input-base" autocomplete="tel" style={bordeEstado(estTel)} aria-invalid={estTel.estado === 'error'} />
+        {@render estadoLinea(estTel, 'Celular de 10 dígitos que empieza por 3. Puedes usar +57.')}
       </div>
     </div>
     <div>
       <label class="field-label" for="cl-nom">Nombres completos *</label>
-      <input id="cl-nom" type="text" bind:value={form.nombres} placeholder="Nombre y apellido" class="input-base" autocomplete="off" />
+      <input id="cl-nom" type="text" value={form.nombres} oninput={onNomInput} placeholder="Nombre y apellido" class="input-base" autocomplete="off" style={bordeEstado(estNom)} aria-invalid={estNom.estado === 'error'} />
+      {@render estadoLinea(estNom, 'Nombre y apellido.')}
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label class="field-label" for="cl-cor">Correo electrónico</label>
-        <input id="cl-cor" type="email" bind:value={form.correo} placeholder="cliente@correo.com" class="input-base" autocomplete="off" />
+        <input id="cl-cor" type="email" bind:value={form.correo} placeholder="cliente@correo.com" class="input-base" autocomplete="off" style={bordeEstado(estCor)} aria-invalid={estCor.estado === 'error'} />
+        {@render estadoLinea(estCor, 'Opcional.')}
       </div>
       <div>
         <label class="field-label" for="cl-dir">Dirección</label>
@@ -256,11 +347,24 @@
     <div>
       <p class="field-label">Placas del vehículo del propietario (hasta 4, opcional)</p>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <input type="text" bind:value={form.placa1} maxlength="8" placeholder="Placa 1" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 1" />
-        <input type="text" bind:value={form.placa2} maxlength="8" placeholder="Placa 2" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 2" />
-        <input type="text" bind:value={form.placa3} maxlength="8" placeholder="Placa 3" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 3" />
-        <input type="text" bind:value={form.placa4} maxlength="8" placeholder="Placa 4" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 4" />
+        <div>
+          <input type="text" value={form.placa1} oninput={(e) => onPlacaCampo(e, 'placa1')} maxlength="7" placeholder="Placa 1" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 1" style={bordeEstado(estPlaca1)} aria-invalid={estPlaca1.estado === 'error'} />
+          {@render estadoLinea(estPlaca1, '')}
+        </div>
+        <div>
+          <input type="text" value={form.placa2} oninput={(e) => onPlacaCampo(e, 'placa2')} maxlength="7" placeholder="Placa 2" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 2" style={bordeEstado(estPlaca2)} aria-invalid={estPlaca2.estado === 'error'} />
+          {@render estadoLinea(estPlaca2, '')}
+        </div>
+        <div>
+          <input type="text" value={form.placa3} oninput={(e) => onPlacaCampo(e, 'placa3')} maxlength="7" placeholder="Placa 3" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 3" style={bordeEstado(estPlaca3)} aria-invalid={estPlaca3.estado === 'error'} />
+          {@render estadoLinea(estPlaca3, '')}
+        </div>
+        <div>
+          <input type="text" value={form.placa4} oninput={(e) => onPlacaCampo(e, 'placa4')} maxlength="7" placeholder="Placa 4" class="input-base uppercase font-mono" autocomplete="off" aria-label="Placa 4" style={bordeEstado(estPlaca4)} aria-invalid={estPlaca4.estado === 'error'} />
+          {@render estadoLinea(estPlaca4, '')}
+        </div>
       </div>
+      <p class="mt-1 text-[11px] text-slate-400">Carro: ABC123 o ABC-123 · Moto: ABC12D.</p>
     </div>
     <div>
       <label class="field-label" for="cl-notas">Observaciones</label>
@@ -271,7 +375,7 @@
     {/if}
     <div class="flex gap-3 justify-end pt-2">
       <Button variant="secondary" onclick={() => (showModal = false)}>Cancelar</Button>
-      <Button variant="primary" disabled={guardando} onclick={guardar}>
+      <Button variant="primary" disabled={guardando || !formularioValido} onclick={guardar}>
         {guardando ? 'Guardando…' : (editando ? 'Guardar cambios' : 'Registrar cliente')}
       </Button>
     </div>

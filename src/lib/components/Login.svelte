@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from '../api';
-  import { login } from '../stores';
+  import { login, logo } from '../stores';
   import Icon from './ui/Icon.svelte';
 
   let usuario = $state('');
@@ -32,10 +32,16 @@
     <div class="panel rounded-[22px] p-7 sm:p-8 shadow-[0_2px_4px_rgba(15,23,42,0.04),0_24px_60px_-24px_rgba(15,23,42,0.22)]">
       <!-- Marca -->
       <div class="flex flex-col items-center text-center mb-8">
-        <div class="relative w-14 h-14 rounded-[18px] bg-gradient-to-br from-blue-600 via-blue-600 to-sky-500 shadow-[0_12px_28px_-10px_rgba(37,99,235,0.65)] flex items-center justify-center mb-4">
-          <Icon name="droplet" class="w-6 h-6 text-white" strokeWidth={2.2} />
-          <span class="absolute inset-0 rounded-[18px] ring-1 ring-inset ring-white/30"></span>
-        </div>
+        {#if $logo}
+          <div class="w-14 h-14 rounded-[18px] bg-white ring-1 ring-inset ring-slate-200 flex items-center justify-center mb-4 overflow-hidden">
+            <img src={$logo} alt="Logo de la empresa" class="w-full h-full object-contain" />
+          </div>
+        {:else}
+          <div class="relative w-14 h-14 rounded-[18px] bg-gradient-to-br from-blue-600 via-blue-600 to-sky-500 shadow-[0_12px_28px_-10px_rgba(37,99,235,0.65)] flex items-center justify-center mb-4">
+            <Icon name="droplet" class="w-6 h-6 text-white" strokeWidth={2.2} />
+            <span class="absolute inset-0 rounded-[18px] ring-1 ring-inset ring-white/30"></span>
+          </div>
+        {/if}
         <h1 class="text-[21px] font-bold tracking-tight text-slate-900">Estación Fátima</h1>
         <p class="text-[13px] text-slate-500 mt-1">Lubricantes &amp; Aditivos &middot; Punto de venta</p>
       </div>

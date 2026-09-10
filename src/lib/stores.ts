@@ -40,3 +40,28 @@ export function setNegocio(id: string) {
   negocio.set(id);
   localStorage.setItem('lub_negocio', id);
 }
+
+// Modo tablet (solo usuarios no-admin): controles más grandes para uso táctil.
+export const modoTablet = writable<boolean>(false);
+
+export function setModoTablet(activo: boolean) {
+  modoTablet.set(activo);
+  try { localStorage.setItem('lub_modo_tablet', activo ? '1' : '0'); } catch { /* ignore */ }
+}
+
+export function restoreModoTablet() {
+  try { modoTablet.set(localStorage.getItem('lub_modo_tablet') === '1'); } catch { /* ignore */ }
+}
+
+// Logo de la app (compartido): data URL de imagen definida en Configuración.
+export const logo = writable<string>('');
+
+export function setLogo(valor: string) {
+  const limpio = valor || '';
+  logo.set(limpio);
+  try { localStorage.setItem('lub_logo', limpio); } catch { /* ignore */ }
+}
+
+export function restoreLogo() {
+  try { logo.set(localStorage.getItem('lub_logo') || ''); } catch { /* ignore */ }
+}

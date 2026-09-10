@@ -8,17 +8,31 @@
   import Icon from './ui/Icon.svelte';
   import type { Venta } from '../types';
 
+  function fechaInputHoy(): string {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  // "dd/mm/aaaa hh:mm" -> "aaaa-mm-dd" (comparable con el input date)
+  function fechaISO(fecha: string): string | null {
+    const parte = (fecha || '').trim().split(' ')[0];
+    const m = parte.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    return m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+  }
+
   let ventas = $state<Venta[]>([]);
   let loading = $state(true);
   let showDeleteModal = $state(false);
   let selectedVenta = $state<Venta | null>(null);
-  let filtroFecha = $state('');
+  // Filtro de fecha inicializado con el día actual
+  let filtroFecha = $state(fechaInputHoy());
   let filtroCajero = $state('');
   let filtroProducto = $state('');
 
   let ventasFiltradas = $derived(
     ventas.filter((v) => {
-      if (filtroFecha && !v.fecha.toLowerCase().includes(filtroFecha.toLowerCase())) return false;
+      if (filtroFecha && fechaISO(v.fecha) !== filtroFecha) return false;
       if (filtroCajero && !v.cajero.toLowerCase().includes(filtroCajero.toLowerCase())) return false;
       if (filtroProducto && !v.producto.toLowerCase().includes(filtroProducto.toLowerCase())) return false;
       return true;
@@ -108,9 +122,8 @@
           <Icon name="calendar" class="w-[17px] h-[17px]" />
         </span>
         <input
-          type="text"
+          type="date"
           bind:value={filtroFecha}
-          placeholder="Filtrar por fecha (dd/mm/aaaa)"
           aria-label="Filtrar por fecha"
           class="input-base pl-9.5"
         />

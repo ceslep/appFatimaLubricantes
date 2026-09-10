@@ -170,7 +170,7 @@
     </div>
     <button
       onclick={() => vistaActual.set('registrar-venta')}
-      class="hidden sm:inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2
+      class="toque hidden sm:inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2
         shadow-[0_1px_2px_rgba(30,64,175,0.35),0_6px_14px_-6px_rgba(37,99,235,0.5)] hover:bg-blue-700 active:scale-[0.98]
         transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
     >
@@ -225,7 +225,7 @@
           </div>
           <button
             onclick={() => vistaActual.set('registrar-entrada')}
-            class="hidden sm:inline-flex items-center gap-1.5 rounded-lg text-[12.5px] font-semibold text-amber-700 hover:text-amber-800 px-2.5 py-1.5 hover:bg-amber-50 transition-colors cursor-pointer"
+            class="toque hidden sm:inline-flex items-center gap-1.5 rounded-lg text-[12.5px] font-semibold text-amber-700 hover:text-amber-800 px-2.5 py-1.5 hover:bg-amber-50 transition-colors cursor-pointer"
           >
             <Icon name="plus" class="w-3.5 h-3.5" />
             Registrar entrada
@@ -275,7 +275,7 @@
           <button
             type="button"
             onclick={setHoy}
-            class="inline-flex items-center gap-1.5 rounded-[10px] bg-blue-50 text-blue-700 text-[12.5px] font-semibold px-3 py-2 ring-1 ring-inset ring-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
+            class="toque inline-flex items-center gap-1.5 rounded-[10px] bg-blue-50 text-blue-700 text-[12.5px] font-semibold px-3 py-2 ring-1 ring-inset ring-blue-100 hover:bg-blue-100 transition-colors cursor-pointer"
           >
             <Icon name="check" class="w-3.5 h-3.5" />
             Hoy
@@ -283,7 +283,7 @@
           <button
             type="button"
             onclick={setTodo}
-            class="inline-flex items-center gap-1.5 rounded-[10px] bg-slate-100 text-slate-600 text-[12.5px] font-semibold px-3 py-2 ring-1 ring-inset ring-slate-200 hover:bg-slate-200 transition-colors cursor-pointer"
+            class="toque inline-flex items-center gap-1.5 rounded-[10px] bg-slate-100 text-slate-600 text-[12.5px] font-semibold px-3 py-2 ring-1 ring-inset ring-slate-200 hover:bg-slate-200 transition-colors cursor-pointer"
           >
             Todo el historial
           </button>
@@ -369,7 +369,7 @@
           <p class="text-[12.5px] text-slate-400 mt-1 max-w-[280px]">Prueba con otro rango de fechas o registra una nueva venta.</p>
           <button
             onclick={() => vistaActual.set('registrar-venta')}
-            class="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-4 py-2.5
+            class="toque mt-4 inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-4 py-2.5
               shadow-[0_1px_2px_rgba(30,64,175,0.35),0_6px_14px_-6px_rgba(37,99,235,0.5)]
               hover:bg-blue-700 active:scale-[0.98] transition-all cursor-pointer"
           >

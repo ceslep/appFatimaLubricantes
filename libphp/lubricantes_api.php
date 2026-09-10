@@ -32,24 +32,34 @@ if (in_array($action, $lub_shared)) {
 }
 
 function ensure_headers($sheet, $headers) {
+    // La verificación de encabezados se cachea: en el uso normal ya existen y
+    // solo hacíamos una petición extra a Sheets en cada acción.
+    $flag = lub_cache_path('headers_' . md5(lub_active_sheet() . '|' . $sheet));
+    if ($flag !== '' && is_file($flag) && (time() - filemtime($flag)) < 43200) return;
+
     $check = lub_get($sheet, 'A1:H1');
-    if (!isset($check['data']['values'][0]) || empty($check['data']['values'][0][0])) {
-        $token = lub_get_token();
-        $cols = chr(64 + count($headers));
-        $url = LUB_SHEETS_API . urlencode($sheet . '!A1:' . $cols . '1') . '?valueInputOption=RAW';
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_CUSTOMREQUEST  => 'PUT',
-            CURLOPT_POSTFIELDS     => json_encode(['values' => [$headers]]),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => [
-                'Authorization: Bearer ' . $token,
-                'Content-Type: application/json',
-            ],
-        ]);
-        curl_exec($ch);
-        curl_close($ch);
+    if (isset($check['data']['values'][0]) && !empty($check['data']['values'][0][0])) {
+        if ($flag !== '') @touch($flag);
+        return;
     }
+
+    $token = lub_get_token();
+    $cols = chr(64 + count($headers));
+    // Usa el spreadsheet activo (coherente con multi-negocio).
+    $url = lub_values_api() . urlencode($sheet . '!A1:' . $cols . '1') . '?valueInputOption=RAW';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PUT',
+        CURLOPT_POSTFIELDS     => json_encode(['values' => [$headers]]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+        ],
+    ]);
+    curl_exec($ch);
+    curl_close($ch);
+    if ($flag !== '') @touch($flag);
 }
 
 try {
@@ -84,26 +94,30 @@ try {
                 foreach ($res['data']['values'] as $i => $row) {
                     if ($i === 0) continue;
                     $clave = strtolower(trim($row[0] ?? ''));
-                    $valores[$clave] = strtoupper(trim($row[1] ?? ''));
+                    if ($clave === '') continue;
+                    // Valor tal cual: los mensajes conservan mayúsculas y saltos de línea.
+                    $valores[$clave] = trim((string)($row[1] ?? ''));
                 }
             }
-            $defectos = [
+            $booleanos = [
                 'enviar_whatsapp' => 'FALSE',
                 'cliente_obligatorio' => 'FALSE',
             ];
             $out = [];
-            foreach ($defectos as $k => $d) {
-                $out[$k] = isset($valores[$k]) && in_array($valores[$k], ['TRUE', 'FALSE']) ? $valores[$k] : $d;
+            foreach ($booleanos as $k => $d) {
+                $v = strtoupper($valores[$k] ?? '');
+                $out[$k] = in_array($v, ['TRUE', 'FALSE']) ? $v : $d;
             }
+            $out['mensaje_registro'] = $valores['mensaje_registro'] ?? '';
+            $out['logo_data'] = $valores['logo_data'] ?? '';
             echo json_encode(['success' => true, 'data' => $out]);
             exit;
 
         case 'guardar_config':
             lub_ensure_sheet(LUB_HOJA_CONFIG);
             ensure_headers(LUB_HOJA_CONFIG, LUB_HEADERS_CONFIG);
-            $permitidas = ['enviar_whatsapp', 'cliente_obligatorio'];
             $cambios = [];
-            foreach ($permitidas as $clave) {
+            foreach (['enviar_whatsapp', 'cliente_obligatorio'] as $clave) {
                 if (array_key_exists($clave, $input)) {
                     $valor = strtoupper(trim((string)$input[$clave]));
                     if (!in_array($valor, ['TRUE', 'FALSE'])) {
@@ -113,6 +127,29 @@ try {
                     }
                     $cambios[$clave] = $valor;
                 }
+            }
+            // Mensaje libre que se muestra en la página pública de registro.
+            if (array_key_exists('mensaje_registro', $input)) {
+                $mensaje = trim((string)$input['mensaje_registro']);
+                $mensaje = function_exists('mb_substr') ? mb_substr($mensaje, 0, 500) : substr($mensaje, 0, 500);
+                $cambios['mensaje_registro'] = $mensaje;
+            }
+            // Logo de la app: se guarda como data URL de imagen en la hoja de configuración.
+            if (array_key_exists('logo_data', $input)) {
+                $logo = trim((string)$input['logo_data']);
+                if ($logo !== '') {
+                    if (strpos($logo, 'data:image/') !== 0) {
+                        http_response_code(400);
+                        echo json_encode(['success' => false, 'error' => 'El logo debe ser una imagen valida']);
+                        exit;
+                    }
+                    if (strlen($logo) > 49000) {
+                        http_response_code(400);
+                        echo json_encode(['success' => false, 'error' => 'El logo es demasiado grande']);
+                        exit;
+                    }
+                }
+                $cambios['logo_data'] = $logo;
             }
             if (empty($cambios)) {
                 http_response_code(400);
@@ -560,6 +597,28 @@ try {
                 }
             }
             echo json_encode(['success' => true, 'data' => $entradas]);
+            exit;
+
+        case 'listar_salidas':
+            ensure_headers(LUB_HOJA_SALIDAS, LUB_HEADERS_SALIDAS);
+            $result = lub_get_all(LUB_HOJA_SALIDAS);
+            $salidas = [];
+            if (isset($result['data']['values'])) {
+                foreach ($result['data']['values'] as $i => $row) {
+                    if ($i === 0 && strtolower($row[0] ?? '') === 'fecha') continue;
+                    if (trim($row[1] ?? '') === '') continue;
+                    $salidas[] = [
+                        'row' => $i + 1,
+                        'fecha' => $row[0] ?? '',
+                        'producto' => $row[1] ?? '',
+                        'cantidad' => lub_num($row[2] ?? 0),
+                        'precio_venta' => lub_num($row[3] ?? 0),
+                        'tipo' => $row[4] ?? '',
+                        'cajero' => $row[5] ?? '',
+                    ];
+                }
+            }
+            echo json_encode(['success' => true, 'data' => $salidas]);
             exit;
 
         case 'eliminar_entrada':

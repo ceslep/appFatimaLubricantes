@@ -43,8 +43,8 @@ export interface Salida {
   fecha: string;
   producto: string;
   cantidad: number;
-  destino: string;
-  observaciones: string;
+  precio_venta: number;
+  tipo: string;
   cajero: string;
 }
 
@@ -83,4 +83,4 @@ export interface UsuarioLogueado {
   nombre: string;
 }
 
-export type VistaActual = 'dashboard' | 'registrar-venta' | 'registrar-entrada' | 'inventario' | 'historial' | 'historial-entradas' | 'reportes' | 'admin-usuarios' | 'configuracion' | 'clientes';
+export type VistaActual = 'dashboard' | 'registrar-venta' | 'registrar-entrada' | 'inventario' | 'historial' | 'historial-entradas' | 'historial-salidas' | 'reportes' | 'admin-usuarios' | 'configuracion' | 'clientes';

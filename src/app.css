@@ -282,3 +282,57 @@
     display: none;
   }
 }
+
+
+/* ===== Modo tablet: controles grandes para pantallas táctiles / guantes ===== */
+.modo-tablet .input-base,
+.modo-tablet select,
+.modo-tablet textarea {
+  min-height: 3.25rem;
+  font-size: 1.0625rem;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.modo-tablet .field-label {
+  font-size: 0.9rem;
+}
+
+/* Botones y accesos marcados como táctiles */
+.modo-tablet .toque {
+  min-height: 3.25rem;
+  padding-top: 0.8rem;
+  padding-bottom: 0.8rem;
+  font-size: 1rem;
+}
+
+.modo-tablet .toque span,
+.modo-tablet .toque p {
+  font-size: 1rem !important;
+  line-height: 1.35 !important;
+}
+
+.modo-tablet .toque-icono {
+  width: 3rem !important;
+  height: 3rem !important;
+  min-height: 3rem !important;
+}
+
+.modo-tablet .toque-icono svg {
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+}
+
+.modo-tablet .chip {
+  font-size: 0.8125rem;
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+/* Filas de tabla más altas y legibles */
+.modo-tablet table td {
+  font-size: 1rem !important;
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
+}
+

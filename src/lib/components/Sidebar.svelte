@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { vistaActual, usuario, logout, negocio, setNegocio } from '../stores';
+  import { vistaActual, usuario, logout, negocio, setNegocio, logo } from '../stores';
   import { NEGOCIOS } from '../negocios';
   import type { VistaActual } from '../types';
   import Icon from './ui/Icon.svelte';
@@ -38,6 +38,7 @@
       items: [
         { icon: 'receipt', label: 'Historial Ventas', vista: 'historial', roles: ['admin'] },
         { icon: 'history', label: 'Historial Entradas', vista: 'historial-entradas', roles: ['admin'] },
+        { icon: 'arrow-up-right', label: 'Salidas de inventario', vista: 'historial-salidas', roles: ['admin'] },
       ],
     },
     {
@@ -113,9 +114,14 @@
 >
   <!-- Marca -->
   <div class="px-5 pt-5 pb-4 flex items-center gap-3">
-    <div class="relative w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-sky-500 shadow-[0_6px_16px_-6px_rgba(37,99,235,0.6)] flex items-center justify-center shrink-0">
-      <Icon name="droplet" class="w-5 h-5 text-white" strokeWidth={2.1} />
-      <span class="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/25"></span>
+    <div class="relative w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center shrink-0
+      {$logo ? 'bg-white ring-1 ring-inset ring-slate-200' : 'bg-gradient-to-br from-blue-600 to-sky-500 shadow-[0_6px_16px_-6px_rgba(37,99,235,0.6)]'}">
+      {#if $logo}
+        <img src={$logo} alt="Logo de la empresa" class="w-full h-full object-contain" />
+      {:else}
+        <Icon name="droplet" class="w-5 h-5 text-white" strokeWidth={2.1} />
+        <span class="absolute inset-0 rounded-2xl ring-1 ring-inset ring-white/25"></span>
+      {/if}
     </div>
     <div class="min-w-0 leading-tight">
       <h2 class="font-bold text-[15px] text-slate-900 tracking-tight truncate">Estación Fátima</h2>
@@ -155,7 +161,7 @@
               <button
                 onclick={() => nav(item.vista)}
                 aria-current={$vistaActual === item.vista ? 'page' : undefined}
-                class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-colors cursor-pointer
+                class="toque w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13.5px] font-medium transition-colors cursor-pointer
                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50
                   { $vistaActual === item.vista
                     ? 'bg-blue-50 text-blue-700'
@@ -190,7 +196,7 @@
         onclick={cerrarSesion}
         title="Cerrar sesión"
         aria-label="Cerrar sesión"
-        class="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+        class="toque-icono p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
       >
         <Icon name="logout" class="w-[18px] h-[18px]" />
       </button>

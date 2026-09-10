@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatCOP } from '../../utils';
+  import { estadoPlaca, limitarPlaca, type EstadoCampo, type EstadoValidacion } from '../../validaciones';
   import type { ProductoCatalogo } from '../../types';
   import Icon from './Icon.svelte';
 
@@ -27,6 +28,29 @@
     onNuevoCliente?: () => void;
     onClienteCambio?: (c: ClienteOpt) => void;
   } = $props();
+
+  let estPlaca = $derived(estadoPlaca(placa));
+
+  function claseEstado(estado: EstadoCampo): string {
+    if (estado === 'ok') return 'text-emerald-600';
+    if (estado === 'error') return 'text-rose-600';
+    if (estado === 'parcial') return 'text-amber-600';
+    return 'text-slate-400';
+  }
+
+  function bordeEstado(e: EstadoValidacion): string {
+    if (e.estado === 'error') return 'border-color:#fb7185';
+    if (e.estado === 'ok') return 'border-color:#34d399';
+    if (e.estado === 'parcial') return 'border-color:#fbbf24';
+    return '';
+  }
+
+  function onPlacaInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement;
+    const limpio = limitarPlaca(el.value);
+    el.value = limpio;
+    placa = limpio;
+  }
 
   let clienteSeleccionado = $derived(clientes.find((c) => c.identificacion === clienteDoc) || null);
   let placasCliente = $derived(
@@ -93,8 +117,45 @@
   {/if}
 
   {#if items.length > 0}
+    <!-- Total y forma de pago arriba: visibles sin desplazarse -->
+    <div class={variant === 'card' ? 'px-5 pt-4 space-y-4' : 'space-y-4'}>
+      <div class="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-4 text-white shadow-lg">
+        <div class="flex items-center justify-between text-[12px] text-slate-300">
+          <span>Artículos ({totalItems})</span>
+          <span>{formatCOP(totalCarrito)}</span>
+        </div>
+        <div class="mt-2 pt-2.5 border-t border-white/10 flex items-end justify-between">
+          <span class="text-[13px] font-medium text-slate-200">Total a pagar</span>
+          <span class="text-[26px] leading-7 font-bold tracking-tight">{formatCOP(totalCarrito)}</span>
+        </div>
+      </div>
+
+      <!-- Forma de pago -->
+      <div>
+        <p class="field-label uppercase !mb-2 text-[10.5px] tracking-[0.12em]">Forma de pago</p>
+        <div class="grid grid-cols-3 gap-1 rounded-xl bg-slate-100/90 p-1">
+          {#each metodosPago as mp}
+            <button
+              type="button"
+              onclick={() => (formaPago = mp.id)}
+              aria-pressed={formaPago === mp.id}
+              class="toque flex flex-col items-center gap-1 rounded-[10px] py-2.5 text-[11.5px] font-semibold transition-all duration-150 cursor-pointer
+                {formaPago === mp.id
+                  ? 'bg-white text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200'
+                  : 'text-slate-500 hover:text-slate-700'}"
+            >
+              <Icon name={mp.icon} class={'w-[18px] h-[18px] ' + (formaPago === mp.id ? 'text-blue-600' : '')} />
+              {mp.id}
+            </button>
+          {/each}
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if items.length > 0}
     <div class="overflow-y-auto scrollbar-thin space-y-2.5
-      {variant === 'card' ? 'max-h-64 lg:max-h-[calc(100dvh-460px)] px-5 py-4' : 'max-h-48 px-1'}">
+      {variant === 'card' ? 'max-h-64 lg:max-h-[calc(100dvh-500px)] px-5 py-4' : 'max-h-48 px-1'}">
       {#each items as item, i}
         <div class="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-3.5">
           <div class="flex items-start justify-between gap-2">
@@ -108,7 +169,7 @@
               type="button"
               onclick={() => onRemove(i)}
               aria-label={'Eliminar ' + item.producto.producto}
-              class="p-1.5 -m-1 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              class="toque-icono p-1.5 -m-1 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
             >
               <Icon name="trash" class="w-4 h-4" />
             </button>
@@ -120,7 +181,7 @@
                 onclick={() => onDecrement(i)}
                 disabled={item.cantidad <= 1}
                 aria-label="Disminuir cantidad"
-                class="w-8 h-8 rounded-lg bg-white ring-1 ring-inset ring-slate-200 text-slate-600 hover:bg-slate-100 active:scale-95 disabled:opacity-35 disabled:pointer-events-none transition-all flex items-center justify-center cursor-pointer"
+                class="toque-icono w-8 h-8 rounded-lg bg-white ring-1 ring-inset ring-slate-200 text-slate-600 hover:bg-slate-100 active:scale-95 disabled:opacity-35 disabled:pointer-events-none transition-all flex items-center justify-center cursor-pointer"
               >
                 <Icon name="minus" class="w-4 h-4" strokeWidth={2.4} />
               </button>
@@ -130,7 +191,7 @@
                 onclick={() => onIncrement(i)}
                 disabled={item.cantidad >= item.producto.stock}
                 aria-label="Aumentar cantidad"
-                class="w-8 h-8 rounded-lg bg-white ring-1 ring-inset ring-slate-200 text-slate-600 hover:bg-slate-100 active:scale-95 disabled:opacity-35 disabled:pointer-events-none transition-all flex items-center justify-center cursor-pointer"
+                class="toque-icono w-8 h-8 rounded-lg bg-white ring-1 ring-inset ring-slate-200 text-slate-600 hover:bg-slate-100 active:scale-95 disabled:opacity-35 disabled:pointer-events-none transition-all flex items-center justify-center cursor-pointer"
               >
                 <Icon name="plus" class="w-4 h-4" strokeWidth={2.4} />
               </button>
@@ -162,7 +223,7 @@
             <button
               type="button"
               onclick={onNuevoCliente}
-              class="inline-flex items-center gap-1 text-[12px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+              class="toque inline-flex items-center gap-1 text-[12px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
             >
               <Icon name="plus" class="w-3.5 h-3.5" strokeWidth={2.6} />
               Registrar nuevo
@@ -185,7 +246,7 @@
               type="button"
               onclick={quitarCliente}
               aria-label="Quitar cliente"
-              class="p-1.5 -m-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              class="toque-icono p-1.5 -m-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
             >
               <Icon name="x" class="w-4 h-4" />
             </button>
@@ -212,7 +273,7 @@
                     <button
                       type="button"
                       onclick={() => elegirCliente(c)}
-                      class="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-blue-50/60 transition-colors border-b border-slate-50 last:border-0 cursor-pointer"
+                      class="toque w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-blue-50/60 transition-colors border-b border-slate-50 last:border-0 cursor-pointer"
                     >
                       <span class="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold flex items-center justify-center shrink-0">
                         {iniciales(c.nombres)}
@@ -255,9 +316,18 @@
         {/if}
 
         <!-- Placa (opcional) -->
-        <div class="relative mt-2">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="car" class="w-4 h-4" /></span>
-          <input type="text" bind:value={placa} placeholder="Placa del vehículo (opcional)" class="input-base pl-9 uppercase" aria-label="Placa del vehículo" />
+        <div class="mt-2">
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="car" class="w-4 h-4" /></span>
+            <input type="text" value={placa} oninput={onPlacaInput} maxlength="7" placeholder="Placa del vehículo (opcional)" class="input-base pl-9 uppercase font-mono" aria-label="Placa del vehículo" style={bordeEstado(estPlaca)} aria-invalid={estPlaca.estado === 'error'} />
+          </div>
+          {#if estPlaca.estado !== 'vacio' && estPlaca.mensaje}
+            <p class="mt-1 text-[11.5px] flex items-center gap-1 {claseEstado(estPlaca.estado)}">
+              {#if estPlaca.estado === 'ok'}<Icon name="check" class="w-3.5 h-3.5 shrink-0" strokeWidth={3} />{/if}
+              {#if estPlaca.estado === 'error'}<Icon name="alert" class="w-3.5 h-3.5 shrink-0" />{/if}
+              <span>{estPlaca.mensaje}</span>
+            </p>
+          {/if}
         </div>
       </div>
 
@@ -281,27 +351,6 @@
         </div>
       {/if}
 
-      <!-- Forma de pago -->
-      <div>
-        <p class="field-label uppercase !mb-2 text-[10.5px] tracking-[0.12em]">Forma de pago</p>
-        <div class="grid grid-cols-3 gap-1 rounded-xl bg-slate-100/90 p-1">
-          {#each metodosPago as mp}
-            <button
-              type="button"
-              onclick={() => (formaPago = mp.id)}
-              aria-pressed={formaPago === mp.id}
-              class="flex flex-col items-center gap-1 rounded-[10px] py-2.5 text-[11.5px] font-semibold transition-all duration-150 cursor-pointer
-                {formaPago === mp.id
-                  ? 'bg-white text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200'
-                  : 'text-slate-500 hover:text-slate-700'}"
-            >
-              <Icon name={mp.icon} class={'w-[18px] h-[18px] ' + (formaPago === mp.id ? 'text-blue-600' : '')} />
-              {mp.id}
-            </button>
-          {/each}
-        </div>
-      </div>
-
       {#if error}
         <div class="notice-error !mt-0" role="alert">
           <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
@@ -309,23 +358,11 @@
         </div>
       {/if}
 
-      <!-- Total -->
-      <div class="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-4 text-white shadow-lg">
-        <div class="flex items-center justify-between text-[12px] text-slate-300">
-          <span>Artículos ({totalItems})</span>
-          <span>{formatCOP(totalCarrito)}</span>
-        </div>
-        <div class="mt-2 pt-2.5 border-t border-white/10 flex items-end justify-between">
-          <span class="text-[13px] font-medium text-slate-200">Total a pagar</span>
-          <span class="text-[26px] leading-7 font-bold tracking-tight">{formatCOP(totalCarrito)}</span>
-        </div>
-      </div>
-
       <button
         type="button"
         onclick={onRegistrar}
         disabled={loading}
-        class="w-full inline-flex items-center justify-center gap-2 rounded-[12px] bg-blue-600 text-white text-[15px] font-bold py-3.5
+        class="toque w-full inline-flex items-center justify-center gap-2 rounded-[12px] bg-blue-600 text-white text-[15px] font-bold py-3.5
           shadow-[0_1px_2px_rgba(30,64,175,0.4),0_10px_24px_-10px_rgba(37,99,235,0.65)]
           hover:bg-blue-700 active:scale-[0.99] disabled:opacity-60 disabled:pointer-events-none
           transition-all duration-150 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 focus-visible:ring-offset-1"

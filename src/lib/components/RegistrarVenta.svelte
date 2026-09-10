@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { api } from '../api';
+  import { api, negocioActual } from '../api';
+  import { cacheLeer, cacheEscribir } from '../cache';
+  import { validarDocumento, validarTelefonoCO, validarCorreo, validarPlaca, estadoDocumento, estadoTelefono, estadoNombres, estadoCorreo, limitarDocumento, limitarNombres, validarNombres, type EstadoCampo, type EstadoValidacion } from '../validaciones';
   import { usuario } from '../stores';
   import { formatCOP, getFechaActual } from '../utils';
   import type { Cliente, ProductoCatalogo } from '../types';
@@ -28,6 +30,16 @@
   let error = $state('');
   let loading = $state(false);
   let loadingProductos = $state(true);
+
+  const CLAVE_CACHE_CATALOGO = 'catalogo:' + negocioActual();
+
+  // Pintado instantáneo: si ya visitamos esta pantalla, mostramos el catálogo
+  // guardado mientras se refresca en segundo plano (stale-while-revalidate).
+  const catalogoCache = cacheLeer<ProductoCatalogo[]>(CLAVE_CACHE_CATALOGO);
+  if (catalogoCache && catalogoCache.length > 0) {
+    catalogo = catalogoCache;
+    loadingProductos = false;
+  }
   let busqueda = $state('');
   let mostrarDropdown = $state(false);
   let mostrarExito = $state(false);
@@ -40,12 +52,45 @@
   let guardandoCliente = $state(false);
   let errorCliente = $state('');
   let formCliente = $state({ identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', notas: '' });
+  let intentoEnvioCliente = $state(false);
+
+  function requeridoCliente(e: EstadoValidacion, msg: string): EstadoValidacion {
+    if (intentoEnvioCliente && e.estado === 'vacio') return { estado: 'error', mensaje: msg };
+    return e;
+  }
+
+  // Validación en vivo mientras se escribe
+  let estClId = $derived(requeridoCliente(estadoDocumento(formCliente.identificacion), 'Ingresa la identificación.'));
+  let estClTel = $derived(requeridoCliente(estadoTelefono(formCliente.telefono), 'Ingresa el celular.'));
+  let estClNom = $derived(requeridoCliente(estadoNombres(formCliente.nombres), 'Ingresa el nombre completo.'));
+  let estClCor = $derived(estadoCorreo(formCliente.correo));
+  let formularioClienteValido = $derived(
+    estClId.estado === 'ok' && estClTel.estado === 'ok' && estClNom.estado === 'ok' && estClCor.estado !== 'error'
+  );
+
+  function claseEstado(estado: EstadoCampo): string {
+    if (estado === 'ok') return 'text-emerald-600';
+    if (estado === 'error') return 'text-rose-600';
+    if (estado === 'parcial') return 'text-amber-600';
+    return 'text-slate-400';
+  }
+
+  function bordeEstado(e: EstadoValidacion): string {
+    if (e.estado === 'error') return 'border-color:#fb7185';
+    if (e.estado === 'ok') return 'border-color:#34d399';
+    if (e.estado === 'parcial') return 'border-color:#fbbf24';
+    return '';
+  }
 
   let productosFiltrados = $derived(
     busqueda
       ? catalogo.filter((p) => p.producto.toLowerCase().includes(busqueda.toLowerCase()))
       : catalogo
   );
+
+  // Acceso rápido: muestra los más vendidos, y mientras cargan usa el catálogo
+  // para que los productos aparezcan sin esperas.
+  let accesoRapido = $derived(topProductos.length > 0 ? topProductos : catalogo.slice(0, 16));
 
   let totalCarrito = $derived(carrito.reduce((sum, item) => sum + item.producto.precio_venta * item.cantidad, 0));
   let totalItems = $derived(carrito.reduce((sum, item) => sum + item.cantidad, 0));
@@ -56,25 +101,54 @@
     { id: 'Transferencia', icon: 'landmark' },
   ];
 
-  onMount(async () => {
-    try {
-      const [cat, top] = await Promise.all([
-        api.listarProductosCatalogo(),
-        api.productosMasVendidos(),
-      ]);
-      catalogo = cat;
-      topProductos = top;
-    } catch (e) { console.error(e); }
-    try {
-      const cfg = await api.obtenerConfig();
-      confWhatsapp = cfg.enviar_whatsapp === 'TRUE';
-      clienteObligatorio = cfg.cliente_obligatorio === 'TRUE';
-    } catch (e) { console.error(e); }
-    try {
-      clientes = await api.listarClientes();
-    } catch (e) { console.error(e); }
-    loadingProductos = false;
+  onMount(() => {
+    // El catálogo es lo único que bloquea la aparición de productos:
+    // se pide primero y el resto de datos carga en paralelo, sin bloquear.
+    void cargarCatalogo();
+    void cargarTop();
+    void cargarConfigYClientes();
   });
+
+  function pintarCatalogo(cat: ProductoCatalogo[]) {
+    catalogo = cat;
+    cacheEscribir(CLAVE_CACHE_CATALOGO, cat);
+  }
+
+  async function cargarCatalogo() {
+    try {
+      pintarCatalogo(await api.listarProductosCatalogo());
+    } catch (e) { console.error(e); }
+    finally { loadingProductos = false; }
+  }
+
+  async function cargarTop() {
+    try { topProductos = await api.productosMasVendidos(); } catch (e) { console.error(e); }
+  }
+
+  async function cargarConfigYClientes() {
+    const [cfgRes, cliRes] = await Promise.allSettled([
+      api.obtenerConfig(),
+      api.listarClientes(),
+    ]);
+    if (cfgRes.status === 'fulfilled') {
+      confWhatsapp = cfgRes.value.enviar_whatsapp === 'TRUE';
+      clienteObligatorio = cfgRes.value.cliente_obligatorio === 'TRUE';
+    } else { console.error(cfgRes.reason); }
+    if (cliRes.status === 'fulfilled') clientes = cliRes.value;
+    else { console.error(cliRes.reason); }
+  }
+
+  // Refresca catálogo y más vendidos tras una venta y actualiza la caché local.
+  async function refrescarCatalogoYTop() {
+    const [catRes, topRes] = await Promise.allSettled([
+      api.listarProductosCatalogo(),
+      api.productosMasVendidos(),
+    ]);
+    if (catRes.status === 'fulfilled') pintarCatalogo(catRes.value);
+    else { console.error(catRes.reason); }
+    if (topRes.status === 'fulfilled') topProductos = topRes.value;
+    else { console.error(topRes.reason); }
+  }
 
   function claveItem(p: ProductoCatalogo): string {
     return (p.producto || '').trim().toLowerCase() + '|' + (p.presentacion || '').trim().toLowerCase();
@@ -151,17 +225,47 @@
     }
   }
 
+  function onNomClienteInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement;
+    const limpio = limitarNombres(el.value);
+    el.value = limpio;
+    formCliente.nombres = limpio;
+  }
+
+  function onTelClienteInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement;
+    let v = el.value.replace(/[^\d+]/g, '');
+    const mas = v.startsWith('+');
+    v = v.replace(/\+/g, '');
+    if (mas) v = '+' + v;
+    v = v.slice(0, 13);
+    el.value = v;
+    formCliente.telefono = v;
+  }
+
+  function onDocClienteInput(e: Event) {
+    const el = e.currentTarget as HTMLInputElement;
+    const limpio = limitarDocumento(el.value);
+    el.value = limpio;
+    formCliente.identificacion = limpio;
+  }
+
   function abrirModalCliente() {
     formCliente = { identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', notas: '' };
     errorCliente = '';
+    intentoEnvioCliente = false;
     modalCliente = true;
   }
 
   async function guardarClienteNuevo() {
-    if (!formCliente.identificacion.trim() || !formCliente.nombres.trim() || !formCliente.telefono.trim()) {
-      errorCliente = 'Identificación, nombres y teléfono son requeridos';
+    if (!formularioClienteValido) {
+      intentoEnvioCliente = true;
+      errorCliente = 'Revisa los campos marcados.';
       return;
     }
+    formCliente.identificacion = validarDocumento(formCliente.identificacion).valorNormalizado;
+    formCliente.nombres = validarNombres(formCliente.nombres).valorNormalizado;
+    formCliente.telefono = validarTelefonoCO(formCliente.telefono).valorNormalizado;
     guardandoCliente = true;
     errorCliente = '';
     try {
@@ -236,6 +340,8 @@
         return;
       }
     }
+    const placaVal = validarPlaca(placa, false);
+    if (!placaVal.valido) { error = placaVal.mensaje; return; }
     loading = true; error = '';
     try {
       const items = carrito.map((item) => ({
@@ -248,7 +354,7 @@
         items,
         cliente: clienteNombre,
         cliente_doc: clienteDoc || undefined,
-        placa,
+        placa: placaVal.valorNormalizado,
         cajero: $usuario?.nombre || '',
         forma_pago: formaPago,
       });
@@ -269,14 +375,8 @@
       carrito = [];
       clienteDoc = ''; clienteNombre = ''; clienteTelefono = '';
       placa = '';
-      try {
-        const [cat, top] = await Promise.all([
-          api.listarProductosCatalogo(),
-          api.productosMasVendidos(),
-        ]);
-        catalogo = cat;
-        topProductos = top;
-      } catch {}
+      // Refresco en segundo plano: no retrasa el modal de éxito.
+      void refrescarCatalogoYTop();
       if (!confWhatsapp) {
         setTimeout(() => { mostrarExito = false; telefono = ''; }, 4000);
       }
@@ -286,6 +386,18 @@
 </script>
 
 <svelte:window onkeydown={teclaGlobal} />
+
+{#snippet estadoLinea(e: EstadoValidacion, ayuda: string)}
+  {#if e.estado === 'vacio'}
+    {#if ayuda}<p class="mt-1 text-[11px] text-slate-400">{ayuda}</p>{/if}
+  {:else if e.mensaje}
+    <p class="mt-1 text-[11.5px] {claseEstado(e.estado)} flex items-center gap-1">
+      {#if e.estado === 'ok'}<Icon name="check" class="w-3.5 h-3.5 shrink-0" strokeWidth={3} />{/if}
+      {#if e.estado === 'error'}<Icon name="alert" class="w-3.5 h-3.5 shrink-0" />{/if}
+      <span>{e.mensaje}</span>
+    </p>
+  {/if}
+{/snippet}
 
 <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-5 items-start {carrito.length > 0 ? 'pb-28 lg:pb-0' : ''}">
   <!-- Columna izquierda: productos -->
@@ -314,7 +426,7 @@
                 type="button"
                 onclick={() => agregarAlCarrito(p)}
                 disabled={p.stock <= 0}
-                class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-blue-50/50 transition-colors border-b border-slate-50 last:border-0 disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer"
+                class="toque w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-blue-50/50 transition-colors border-b border-slate-50 last:border-0 disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer"
               >
                 <div class="min-w-0 flex-1">
                   <span class="font-semibold text-[13.5px] text-slate-900 block truncate">{p.producto}</span>
@@ -345,16 +457,16 @@
           {/each}
         </div>
       </div>
-    {:else if topProductos.length > 0}
+    {:else if accesoRapido.length > 0}
       <div>
         <p class="field-label uppercase text-[10.5px] tracking-[0.12em] !mb-2.5">Acceso rápido</p>
         <div class="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-3">
-          {#each topProductos as p}
+          {#each accesoRapido as p}
             <button
               type="button"
               onclick={() => agregarAlCarrito(p)}
               disabled={p.stock <= 0}
-              class="group relative panel panel-hover rounded-2xl p-3 sm:p-3.5 text-left flex flex-col gap-1.5
+              class="toque group relative panel panel-hover rounded-2xl p-3 sm:p-3.5 text-left flex flex-col gap-1.5
                 disabled:opacity-55 disabled:pointer-events-none cursor-pointer
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
             >
@@ -417,7 +529,7 @@
       <button
         type="button"
         onclick={() => (hojaAbierta = true)}
-        class="shrink-0 inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white text-[14px] font-bold px-4 py-3
+        class="toque shrink-0 inline-flex items-center gap-2 rounded-xl bg-blue-600 text-white text-[14px] font-bold px-4 py-3
           hover:bg-blue-500 active:scale-[0.98] transition-all cursor-pointer
           shadow-[0_6px_16px_-8px_rgba(59,130,246,0.9)]"
       >
@@ -495,7 +607,7 @@
           <p class="text-[12px] text-slate-500 mt-0.5">Se guardará para futuras ventas y recibos.</p>
         </div>
         <button type="button" onclick={() => (modalCliente = false)} aria-label="Cerrar"
-          class="p-1.5 -m-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer">
+          class="toque-icono p-1.5 -m-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer">
           <Icon name="x" class="w-5 h-5" />
         </button>
       </div>
@@ -503,31 +615,35 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="field-label" for="rv-cl-id">Identificación *</label>
-            <input id="rv-cl-id" type="text" bind:value={formCliente.identificacion} placeholder="Cédula o NIT" class="input-base" autocomplete="off" />
+            <input id="rv-cl-id" type="text" inputmode="numeric" maxlength="12" value={formCliente.identificacion} oninput={onDocClienteInput} placeholder="Cédula o NIT" class="input-base" autocomplete="off" style={bordeEstado(estClId)} aria-invalid={estClId.estado === 'error'} />
+            {@render estadoLinea(estClId, 'Cédula de 10 dígitos o NIT con guion.')}
           </div>
           <div>
             <label class="field-label" for="rv-cl-tel">Teléfono / WhatsApp *</label>
-            <input id="rv-cl-tel" type="tel" inputmode="numeric" bind:value={formCliente.telefono} placeholder="Ej: 3001234567" class="input-base" autocomplete="tel" />
+            <input id="rv-cl-tel" type="tel" inputmode="tel" maxlength="13" value={formCliente.telefono} oninput={onTelClienteInput} placeholder="3001234567 o +57 3001234567" class="input-base" autocomplete="tel" style={bordeEstado(estClTel)} aria-invalid={estClTel.estado === 'error'} />
+            {@render estadoLinea(estClTel, 'Celular de 10 dígitos que empieza por 3. Puedes usar +57.')}
           </div>
         </div>
         <div>
           <label class="field-label" for="rv-cl-nom">Nombres completos *</label>
-          <input id="rv-cl-nom" type="text" bind:value={formCliente.nombres} placeholder="Nombre y apellido" class="input-base" autocomplete="off" />
+          <input id="rv-cl-nom" type="text" value={formCliente.nombres} oninput={onNomClienteInput} placeholder="Nombre y apellido" class="input-base" autocomplete="off" style={bordeEstado(estClNom)} aria-invalid={estClNom.estado === 'error'} />
+          {@render estadoLinea(estClNom, 'Nombre y apellido.')}
         </div>
         <div>
           <label class="field-label" for="rv-cl-cor">Correo electrónico</label>
-          <input id="rv-cl-cor" type="email" bind:value={formCliente.correo} placeholder="cliente@correo.com" class="input-base" autocomplete="off" />
+          <input id="rv-cl-cor" type="email" bind:value={formCliente.correo} placeholder="cliente@correo.com" class="input-base" autocomplete="off" style={bordeEstado(estClCor)} aria-invalid={estClCor.estado === 'error'} />
+          {@render estadoLinea(estClCor, 'Opcional.')}
         </div>
         {#if errorCliente}
           <p class="text-[13px] text-rose-600">{errorCliente}</p>
         {/if}
         <div class="flex gap-3 justify-end pt-1">
           <button type="button" onclick={() => (modalCliente = false)}
-            class="inline-flex items-center justify-center rounded-[10px] bg-white text-slate-700 ring-1 ring-inset ring-slate-300/80 px-4 py-2.5 text-[13.5px] font-semibold hover:bg-slate-50 active:scale-[0.98] transition-all cursor-pointer">
+            class="toque inline-flex items-center justify-center rounded-[10px] bg-white text-slate-700 ring-1 ring-inset ring-slate-300/80 px-4 py-2.5 text-[13.5px] font-semibold hover:bg-slate-50 active:scale-[0.98] transition-all cursor-pointer">
             Cancelar
           </button>
-          <button type="button" onclick={guardarClienteNuevo} disabled={guardandoCliente}
-            class="inline-flex items-center justify-center gap-2 rounded-[10px] bg-blue-600 text-white px-4 py-2.5 text-[13.5px] font-bold hover:bg-blue-700 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none transition-all cursor-pointer">
+          <button type="button" onclick={guardarClienteNuevo} disabled={guardandoCliente || !formularioClienteValido}
+            class="toque inline-flex items-center justify-center gap-2 rounded-[10px] bg-blue-600 text-white px-4 py-2.5 text-[13.5px] font-bold hover:bg-blue-700 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none transition-all cursor-pointer">
             {#if guardandoCliente}Guardando…{:else}<Icon name="check" class="w-4 h-4" strokeWidth={2.4} />Guardar cliente{/if}
           </button>
         </div>
