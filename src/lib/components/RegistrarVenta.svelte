@@ -8,6 +8,7 @@
   import type { Cliente, ProductoCatalogo } from '../types';
   import Icon from './ui/Icon.svelte';
   import CartResumen from './ui/CartResumen.svelte';
+  import Modal from './ui/Modal.svelte';
 
   interface ProductoTop extends ProductoCatalogo {
     total_vendido: number;
@@ -55,6 +56,7 @@
   let intentoEnvioCliente = $state(false);
   let verificandoDocCliente = $state(false);
   let docExistenteCliente = $state(false);
+  let modalDuplicadoCliente = $state(false);
 
   function requeridoCliente(e: EstadoValidacion, msg: string): EstadoValidacion {
     if (intentoEnvioCliente && e.estado === 'vacio') return { estado: 'error', mensaje: msg };
@@ -260,6 +262,7 @@
     formCliente.identificacion = limpio;
     docExistenteCliente = false;
     verificandoDocCliente = false;
+    modalDuplicadoCliente = false;
   }
 
   // Al salir del campo: verifica si la identificación ya está registrada
@@ -271,6 +274,7 @@
     try {
       const res = await api.clienteExiste(r.valorNormalizado);
       docExistenteCliente = res.existe;
+      modalDuplicadoCliente = res.existe;
     } catch (e) {
       console.error(e);
     }
@@ -769,3 +773,21 @@
     </div>
   </div>
 {/if}
+
+<Modal show={modalDuplicadoCliente} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicadoCliente = false)}>
+  <div class="flex items-start gap-3 rounded-2xl bg-rose-50/70 ring-1 ring-inset ring-rose-100 p-4">
+    <span class="w-9 h-9 rounded-[10px] bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+      <Icon name="alert" class="w-[18px] h-[18px]" />
+    </span>
+    <div class="text-[13.5px] text-slate-700 leading-relaxed">
+      La identificación <strong class="text-slate-900">{formCliente.identificacion}</strong> ya está registrada en la base de datos de clientes.
+      <br />No es posible registrarla de nuevo.
+    </div>
+  </div>
+  <div class="flex justify-end pt-5">
+    <button type="button" onclick={() => (modalDuplicadoCliente = false)}
+      class="inline-flex items-center justify-center rounded-[10px] bg-blue-600 text-white px-4 py-2.5 text-[13.5px] font-bold hover:bg-blue-700 active:scale-[0.98] transition-all cursor-pointer">
+      Entendido
+    </button>
+  </div>
+</Modal>

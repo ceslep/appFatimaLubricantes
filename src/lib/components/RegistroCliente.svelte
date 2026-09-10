@@ -8,6 +8,7 @@
     type EstadoCampo, type EstadoValidacion,
   } from '../validaciones';
   import Icon from './ui/Icon.svelte';
+  import Modal from './ui/Modal.svelte';
 
   const MENSAJE_DEFECTO = 'Regístrate y haz parte de nuestro programa de fidelidad. Te contactaremos con promociones y beneficios exclusivos.';
 
@@ -19,6 +20,7 @@
   let intentoEnvio = $state(false);
   let verificandoDoc = $state(false);
   let docExistente = $state(false);
+  let modalDuplicado = $state(false);
 
   let form = $state({ identificacion: '', nombres: '', telefono: '', correo: '', direccion: '', placa1: '' });
 
@@ -84,6 +86,7 @@
     form.identificacion = limpio;
     docExistente = false;
     verificandoDoc = false;
+    modalDuplicado = false;
   }
 
   // Al salir del campo: consulta si la identificación ya está registrada
@@ -95,6 +98,7 @@
     try {
       const res = await api.clienteExiste(r.valorNormalizado);
       docExistente = res.existe;
+      modalDuplicado = res.existe;
     } catch (e) {
       console.error(e);
     }
@@ -390,3 +394,21 @@
     </p>
   </div>
 </div>
+
+<Modal show={modalDuplicado} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicado = false)}>
+  <div class="flex items-start gap-3 rounded-2xl bg-rose-50/70 ring-1 ring-inset ring-rose-100 p-4">
+    <span class="w-9 h-9 rounded-[10px] bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+      <Icon name="alert" class="w-[18px] h-[18px]" />
+    </span>
+    <div class="text-[13.5px] text-slate-700 leading-relaxed">
+      La identificación <strong class="text-slate-900">{form.identificacion}</strong> ya está registrada en la base de datos de clientes.
+      <br />No es posible registrarla de nuevo.
+    </div>
+  </div>
+  <div class="flex justify-end pt-5">
+    <button type="button" onclick={() => (modalDuplicado = false)}
+      class="inline-flex items-center justify-center rounded-[10px] bg-blue-600 text-white px-4 py-2.5 text-[13.5px] font-bold hover:bg-blue-700 active:scale-[0.98] transition-all cursor-pointer">
+      Entendido
+    </button>
+  </div>
+</Modal>
