@@ -63,10 +63,13 @@
     return e;
   }
 
+  // Solo cuenta como duplicado si el campo tiene documento
+  let duplicadoCliente = $derived(docExistenteCliente && formCliente.identificacion.trim() !== '');
+
   // Validación en vivo mientras se escribe
   let estClIdBase = $derived(requeridoCliente(estadoDocumento(formCliente.identificacion), 'Ingresa la identificación.'));
   let estClId = $derived<EstadoValidacion>(
-    docExistenteCliente
+    duplicadoCliente
       ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
       : verificandoDocCliente
         ? { estado: 'parcial', mensaje: 'Verificando identificación…' }
@@ -77,7 +80,7 @@
   let estClCor = $derived(estadoCorreo(formCliente.correo));
   let formularioClienteValido = $derived(
     estClId.estado === 'ok' && estClTel.estado === 'ok' && estClNom.estado === 'ok' && estClCor.estado !== 'error'
-    && !docExistenteCliente && !verificandoDocCliente
+    && !duplicadoCliente && !verificandoDocCliente
   );
 
   function claseEstado(estado: EstadoCampo): string {
@@ -270,15 +273,23 @@
     const r = validarDocumento(formCliente.identificacion);
     docExistenteCliente = false;
     if (!r.valido) return;
+    const consultado = r.valorNormalizado;
     verificandoDocCliente = true;
     try {
-      const res = await api.clienteExiste(r.valorNormalizado);
+      const res = await api.clienteExiste(consultado);
+      // Si el campo cambió o quedó vacío mientras se consultaba, se descarta la respuesta
+      if (formCliente.identificacion.trim() === '' || validarDocumento(formCliente.identificacion).valorNormalizado !== consultado) {
+        docExistenteCliente = false;
+        modalDuplicadoCliente = false;
+        return;
+      }
       docExistenteCliente = res.existe;
       modalDuplicadoCliente = res.existe;
     } catch (e) {
       console.error(e);
+    } finally {
+      verificandoDocCliente = false;
     }
-    verificandoDocCliente = false;
   }
 
   function abrirModalCliente() {
@@ -665,7 +676,7 @@
           <input id="rv-cl-cor" type="email" bind:value={formCliente.correo} placeholder="cliente@correo.com" class="input-base" autocomplete="off" style={bordeEstado(estClCor)} aria-invalid={estClCor.estado === 'error'} />
           {@render estadoLinea(estClCor, 'Opcional.')}
         </div>
-        {#if docExistenteCliente}
+        {#if duplicadoCliente}
           <div class="notice-error" role="alert">
             <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
             <span><strong>El cliente ya existe.</strong> Esa identificación ya está registrada.</span>
@@ -774,7 +785,7 @@
   </div>
 {/if}
 
-<Modal show={modalDuplicadoCliente} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicadoCliente = false)}>
+<Modal show={modalDuplicadoCliente && duplicadoCliente} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicadoCliente = false)}>
   <div class="flex items-start gap-3 rounded-2xl bg-rose-50/70 ring-1 ring-inset ring-rose-100 p-4">
     <span class="w-9 h-9 rounded-[10px] bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
       <Icon name="alert" class="w-[18px] h-[18px]" />

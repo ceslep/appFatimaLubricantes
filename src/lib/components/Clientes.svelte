@@ -28,10 +28,13 @@
     return e;
   }
 
+  // Solo cuenta como duplicado si el campo tiene documento
+  let duplicado = $derived(docExistente && form.identificacion.trim() !== '');
+
   // Validación en vivo mientras se escribe
   let estIdBase = $derived(requerido(estadoDocumento(form.identificacion, 6), 'Ingresa la identificación.'));
   let estId = $derived<EstadoValidacion>(
-    docExistente
+    duplicado
       ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
       : verificandoDoc
         ? { estado: 'parcial', mensaje: 'Verificando identificación…' }
@@ -49,7 +52,7 @@
     && estCor.estado !== 'error'
     && estPlaca1.estado !== 'error' && estPlaca2.estado !== 'error'
     && estPlaca3.estado !== 'error' && estPlaca4.estado !== 'error'
-    && !docExistente && !verificandoDoc
+    && !duplicado && !verificandoDoc
   );
 
   function claseEstado(estado: EstadoCampo): string {
@@ -114,15 +117,23 @@
     if (!r.valido) return;
     // Al editar el mismo cliente no se considera duplicado
     if (editando && validarDocumento(editando.identificacion, 6).valorNormalizado === r.valorNormalizado) return;
+    const consultado = r.valorNormalizado;
     verificandoDoc = true;
     try {
-      const res = await api.clienteExiste(r.valorNormalizado);
+      const res = await api.clienteExiste(consultado);
+      // Si el campo cambió o quedó vacío mientras se consultaba, se descarta la respuesta
+      if (form.identificacion.trim() === '' || validarDocumento(form.identificacion, 6).valorNormalizado !== consultado) {
+        docExistente = false;
+        modalDuplicado = false;
+        return;
+      }
       docExistente = res.existe;
       modalDuplicado = res.existe;
     } catch (e) {
       console.error(e);
+    } finally {
+      verificandoDoc = false;
     }
-    verificandoDoc = false;
   }
 
   function onTelInput(e: Event) {
@@ -402,7 +413,7 @@
       <label class="field-label" for="cl-notas">Observaciones</label>
       <input id="cl-notas" type="text" bind:value={form.notas} placeholder="Observaciones (opcional)" class="input-base" autocomplete="off" />
     </div>
-    {#if docExistente}
+    {#if duplicado}
       <div class="notice-error" role="alert">
         <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
         <span><strong>El cliente ya existe.</strong> Esa identificación ya está registrada.</span>
@@ -420,7 +431,7 @@
   </div>
 </Modal>
 
-<Modal show={modalDuplicado} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicado = false)}>
+<Modal show={modalDuplicado && duplicado} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicado = false)}>
   <div class="flex items-start gap-3 rounded-2xl bg-rose-50/70 ring-1 ring-inset ring-rose-100 p-4">
     <span class="w-9 h-9 rounded-[10px] bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
       <Icon name="alert" class="w-[18px] h-[18px]" />

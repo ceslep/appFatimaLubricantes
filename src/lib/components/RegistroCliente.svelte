@@ -29,10 +29,13 @@
     return e;
   }
 
+  // Solo cuenta como duplicado si el campo tiene documento
+  let duplicado = $derived(docExistente && form.identificacion.trim() !== '');
+
   // Validación en vivo mientras se escribe
   let estIdBase = $derived(requerido(estadoDocumento(form.identificacion, 6), 'Ingresa la identificación.'));
   let estId = $derived<EstadoValidacion>(
-    docExistente
+    duplicado
       ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
       : verificandoDoc
         ? { estado: 'parcial', mensaje: 'Verificando identificación…' }
@@ -46,7 +49,7 @@
   let formularioValido = $derived(
     estId.estado === 'ok' && estTel.estado === 'ok' && estNom.estado === 'ok'
     && estCor.estado === 'ok' && estPlaca.estado === 'ok'
-    && !docExistente && !verificandoDoc
+    && !duplicado && !verificandoDoc
   );
 
   function claseEstado(estado: EstadoCampo): string {
@@ -94,15 +97,23 @@
     const r = validarDocumento(form.identificacion, 6);
     docExistente = false;
     if (!r.valido) return;
+    const consultado = r.valorNormalizado;
     verificandoDoc = true;
     try {
-      const res = await api.clienteExiste(r.valorNormalizado);
+      const res = await api.clienteExiste(consultado);
+      // Si el campo cambió o quedó vacío mientras se consultaba, se descarta la respuesta
+      if (form.identificacion.trim() === '' || validarDocumento(form.identificacion, 6).valorNormalizado !== consultado) {
+        docExistente = false;
+        modalDuplicado = false;
+        return;
+      }
       docExistente = res.existe;
       modalDuplicado = res.existe;
     } catch (e) {
       console.error(e);
+    } finally {
+      verificandoDoc = false;
     }
-    verificandoDoc = false;
   }
 
   function onTelInput(e: Event) {
@@ -346,7 +357,7 @@
             </div>
           </div>
 
-          {#if docExistente}
+          {#if duplicado}
             <div class="notice-error" role="alert">
               <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
               <span><strong>El cliente ya existe.</strong> La identificación {form.identificacion} ya está registrada, no es posible registrarla de nuevo.</span>
@@ -395,7 +406,7 @@
   </div>
 </div>
 
-<Modal show={modalDuplicado} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicado = false)}>
+<Modal show={modalDuplicado && duplicado} title="Cliente ya registrado" subtitle="No es posible registrar un cliente duplicado" onclose={() => (modalDuplicado = false)}>
   <div class="flex items-start gap-3 rounded-2xl bg-rose-50/70 ring-1 ring-inset ring-rose-100 p-4">
     <span class="w-9 h-9 rounded-[10px] bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
       <Icon name="alert" class="w-[18px] h-[18px]" />
