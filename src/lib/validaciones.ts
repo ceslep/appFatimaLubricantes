@@ -50,7 +50,7 @@ export function digitoVerificacionNIT(base: string): number {
   return residuo < 2 ? residuo : 11 - residuo;
 }
 
-export function validarDocumento(valor: string): ResultadoValidacion {
+export function validarDocumento(valor: string, minDigitos = 10): ResultadoValidacion {
   const v = normalizarDocumento(valor);
   if (!v) return { valido: false, mensaje: 'Ingresa el número de identificación.', valorNormalizado: '' };
 
@@ -72,8 +72,9 @@ export function validarDocumento(valor: string): ResultadoValidacion {
   if (!/^\d+$/.test(v)) {
     return { valido: false, mensaje: 'La identificación solo debe tener números.', valorNormalizado: v };
   }
-  if (v.length !== 10) {
-    return { valido: false, mensaje: 'La cédula debe tener 10 dígitos.', valorNormalizado: v };
+  if (v.length < minDigitos || v.length > 10) {
+    const rango = minDigitos >= 10 ? '10 dígitos' : minDigitos + ' a 10 dígitos';
+    return { valido: false, mensaje: 'La cédula debe tener ' + rango + '.', valorNormalizado: v };
   }
   if (SOLO_REPETIDOS.test(v)) {
     return { valido: false, mensaje: 'Número de identificación inválido.', valorNormalizado: v };
@@ -189,16 +190,16 @@ function faltan(n: number): string {
   return 'Faltan ' + n + ' dígito' + (n === 1 ? '' : 's') + '.';
 }
 
-export function estadoDocumento(valor: string): EstadoValidacion {
+export function estadoDocumento(valor: string, minDigitos = 10): EstadoValidacion {
   const v = normalizarDocumento(valor);
   if (!v) return { estado: 'vacio', mensaje: '' };
   if (v.includes('-')) {
-    const r = validarDocumento(v);
+    const r = validarDocumento(v, minDigitos);
     return r.valido ? { estado: 'ok', mensaje: 'NIT válido.' } : { estado: 'error', mensaje: r.mensaje };
   }
   if (!/^\d+$/.test(v)) return { estado: 'error', mensaje: 'La identificación solo debe tener números.' };
-  if (v.length < 10) return { estado: 'parcial', mensaje: faltan(10 - v.length) };
-  if (v.length > 10) return { estado: 'error', mensaje: 'La cédula debe tener 10 dígitos.' };
+  if (v.length < minDigitos) return { estado: 'parcial', mensaje: faltan(minDigitos - v.length) };
+  if (v.length > 10) return { estado: 'error', mensaje: 'La cédula no debe tener más de 10 dígitos.' };
   if (SOLO_REPETIDOS.test(v)) return { estado: 'error', mensaje: 'Número de identificación inválido.' };
   return { estado: 'ok', mensaje: 'Cédula válida.' };
 }

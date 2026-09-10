@@ -29,7 +29,7 @@
   }
 
   // Validación en vivo mientras se escribe
-  let estIdBase = $derived(requerido(estadoDocumento(form.identificacion), 'Ingresa la identificación.'));
+  let estIdBase = $derived(requerido(estadoDocumento(form.identificacion, 6), 'Ingresa la identificación.'));
   let estId = $derived<EstadoValidacion>(
     docExistente
       ? { estado: 'error', mensaje: 'Ya existe un cliente registrado con esta identificación.' }
@@ -109,11 +109,11 @@
 
   // Al salir del campo: verifica si la identificación ya está registrada
   async function verificarDocumento() {
-    const r = validarDocumento(form.identificacion);
+    const r = validarDocumento(form.identificacion, 6);
     docExistente = false;
     if (!r.valido) return;
     // Al editar el mismo cliente no se considera duplicado
-    if (editando && validarDocumento(editando.identificacion).valorNormalizado === r.valorNormalizado) return;
+    if (editando && validarDocumento(editando.identificacion, 6).valorNormalizado === r.valorNormalizado) return;
     verificandoDoc = true;
     try {
       const res = await api.clienteExiste(r.valorNormalizado);
@@ -157,7 +157,7 @@
       return;
     }
 
-    form.identificacion = validarDocumento(form.identificacion).valorNormalizado;
+    form.identificacion = validarDocumento(form.identificacion, 6).valorNormalizado;
     form.nombres = validarNombres(form.nombres).valorNormalizado;
     form.telefono = validarTelefonoCO(form.telefono).valorNormalizado;
     for (const k of ['placa1', 'placa2', 'placa3', 'placa4'] as const) {
@@ -352,7 +352,7 @@
       <div>
         <label class="field-label" for="cl-id">Identificación *</label>
         <input id="cl-id" type="text" inputmode="numeric" maxlength="12" value={form.identificacion} oninput={onDocInput} onblur={verificarDocumento} placeholder="Cédula o NIT" class="input-base" autocomplete="off" style={bordeEstado(estId)} aria-invalid={estId.estado === 'error'} />
-        {@render estadoLinea(estId, 'Cédula de 10 dígitos o NIT con guion (900123456-7).')}
+        {@render estadoLinea(estId, 'Cédula de 6 a 10 dígitos o NIT con guion (900123456-7).')}
       </div>
       <div>
         <label class="field-label" for="cl-tel">Teléfono / WhatsApp *</label>
