@@ -3,3 +3,7 @@ node_modules/
 .env
 *.log
 libphp/assets/
+
+# Logs del backend: el sistema legacy escribe error_log sin extensión.
+error_log
+libphp/debug_log.txt
