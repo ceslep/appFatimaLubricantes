@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { api } from '../api';
+  import { usuario } from '../stores';
   import { formatCOP } from '../utils';
   import Table from './ui/Table.svelte';
   import Badge from './ui/Badge.svelte';
@@ -14,6 +15,10 @@
     stock: number;
     precio_venta: number;
   }
+
+  // Solo el administrador puede modificar stock, precios o crear productos.
+  // El cajero ve el inventario en modo lectura.
+  let esAdmin = $derived($usuario?.rol === 'admin');
 
   let inventario = $state<ProductoInventario[]>([]);
   let loading = $state(true);
@@ -46,6 +51,7 @@
   });
 
   function iniciarEdicion(item: ProductoInventario) {
+    if (!esAdmin) return;
     editando = item.producto + '|' + item.presentacion;
     nuevoPrecio = item.precio_venta;
   }
@@ -60,6 +66,7 @@
   }
 
   async function guardarPrecio(item: ProductoInventario) {
+    if (!esAdmin) return;
     guardando = true;
     try {
       await api.actualizarPrecio(item.producto, item.presentacion, nuevoPrecio);
@@ -78,6 +85,7 @@
   let guardandoStock = $state(false);
 
   function iniciarEdicionStock(item: ProductoInventario) {
+    if (!esAdmin) return;
     editandoStock = getClave(item);
     nuevoStock = item.stock;
   }
@@ -88,6 +96,7 @@
   }
 
   async function guardarStock(item: ProductoInventario) {
+    if (!esAdmin) return;
     guardandoStock = true;
     try {
       await api.actualizarStock(item.producto, item.presentacion, nuevoStock);
@@ -107,6 +116,7 @@
   }
 
   function abrirModal() {
+    if (!esAdmin) return;
     nuevoProducto = '';
     nuevaPresentacion = '';
     nuevoPrecioVenta = 0;
@@ -115,6 +125,7 @@
   }
 
   async function crearProducto() {
+    if (!esAdmin) return;
     if (!nuevoProducto || !nuevaPresentacion) {
       error = 'Complete producto y presentación';
       return;
@@ -166,16 +177,23 @@
       {#if conteoBajo > 0}
         <span class="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200">{conteoBajo} con stock bajo</span>
       {/if}
-      <button
-        onclick={abrirModal}
-        class="inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2.5
-          shadow-[0_1px_2px_rgba(30,64,175,0.35),0_6px_14px_-6px_rgba(37,99,235,0.5)]
-          hover:bg-blue-700 active:scale-[0.98] transition-all cursor-pointer
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-      >
-        <Icon name="plus" class="w-4 h-4" strokeWidth={2.4} />
-        <span class="hidden xs:inline">Nuevo producto</span>
-      </button>
+      {#if esAdmin}
+        <button
+          onclick={abrirModal}
+          class="inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2.5
+            shadow-[0_1px_2px_rgba(30,64,175,0.35),0_6px_14px_-6px_rgba(37,99,235,0.5)]
+            hover:bg-blue-700 active:scale-[0.98] transition-all cursor-pointer
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+        >
+          <Icon name="plus" class="w-4 h-4" strokeWidth={2.4} />
+          <span class="hidden xs:inline">Nuevo producto</span>
+        </button>
+      {:else}
+        <span class="chip bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200" title="Tu rol permite consultar el inventario, no modificarlo">
+          <Icon name="lock" class="w-3.5 h-3.5" />
+          Solo lectura
+        </span>
+      {/if}
     </div>
   </div>
 
@@ -204,35 +222,39 @@
             </td>
             <td class="px-4 py-3.5 text-[13px] text-slate-500">{item.presentacion}</td>
             <td class="px-4 py-3.5">
-              {#if editandoStock === getClave(item)}
+              {#if esAdmin && editandoStock === getClave(item)}
                 <div class="flex items-center gap-1.5">
                   <input type="number" bind:value={nuevoStock} min="0" class="input-base w-24 py-1.5 text-right"
                     onkeydown={(e) => { if (e.key === 'Enter') guardarStock(item); if (e.key === 'Escape') cancelarEdicionStock(); }} />
                   <button onclick={() => guardarStock(item)} disabled={guardandoStock} title="Guardar" class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"><Icon name="check" class="w-[18px] h-[18px]" strokeWidth={2.2} /></button>
                   <button onclick={cancelarEdicionStock} title="Cancelar" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors cursor-pointer"><Icon name="x" class="w-[18px] h-[18px]" strokeWidth={2.2} /></button>
                 </div>
-              {:else}
+              {:else if esAdmin}
                 <button onclick={() => iniciarEdicionStock(item)} title="Clic para editar stock"
                   class="group/stock inline-flex items-center gap-1.5 rounded-lg px-2 py-1 -my-1 font-bold text-[13.5px] {colorStock(item.stock)} hover:bg-amber-50 transition-colors cursor-pointer">
                   {item.stock}
                   <Icon name="pencil" class="w-3.5 h-3.5 text-slate-300 group-hover/stock:text-amber-500" />
                 </button>
+              {:else}
+                <span class="inline-flex items-center px-2 py-1 -my-1 font-bold text-[13.5px] {colorStock(item.stock)}">{item.stock}</span>
               {/if}
             </td>
             <td class="px-4 py-3.5">
-              {#if editando === getClave(item)}
+              {#if esAdmin && editando === getClave(item)}
                 <div class="flex items-center justify-end gap-1.5">
                   <input type="number" bind:value={nuevoPrecio} min="0" class="input-base w-32 py-1.5 text-right"
                     onkeydown={(e) => { if (e.key === 'Enter') guardarPrecio(item); if (e.key === 'Escape') cancelarEdicion(); }} />
                   <button onclick={() => guardarPrecio(item)} disabled={guardando} title="Guardar" class="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"><Icon name="check" class="w-[18px] h-[18px]" strokeWidth={2.2} /></button>
                   <button onclick={cancelarEdicion} title="Cancelar" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors cursor-pointer"><Icon name="x" class="w-[18px] h-[18px]" strokeWidth={2.2} /></button>
                 </div>
-              {:else}
+              {:else if esAdmin}
                 <button onclick={() => iniciarEdicion(item)} title="Clic para editar precio"
                   class="group/price flex items-center justify-end gap-1.5 ml-auto rounded-lg px-2 py-1 -my-1 text-[13.5px] font-semibold text-slate-700 hover:text-blue-700 hover:bg-blue-50 transition-colors cursor-pointer">
                   {formatCOP(item.precio_venta)}
                   <Icon name="pencil" class="w-3.5 h-3.5 text-slate-300 group-hover/price:text-blue-500" />
                 </button>
+              {:else}
+                <span class="flex items-center justify-end text-[13.5px] font-semibold text-slate-700">{formatCOP(item.precio_venta)}</span>
               {/if}
             </td>
             <td class="px-4 py-3.5"><Badge variant={chipEstado(item.stock).variant} dot>{chipEstado(item.stock).texto}</Badge></td>
@@ -262,7 +284,7 @@
           <div class="mt-3 grid grid-cols-2 gap-2.5">
             <div class="rounded-xl bg-slate-50/80 ring-1 ring-inset ring-slate-100 px-3 py-2.5">
               <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Stock</p>
-              {#if editandoStock === getClave(item)}
+              {#if esAdmin && editandoStock === getClave(item)}
                 <input type="number" bind:value={nuevoStock} min="0" class="input-base w-full py-1 text-right"
                   onkeydown={(e) => { if (e.key === 'Enter') guardarStock(item); if (e.key === 'Escape') cancelarEdicionStock(); }} />
                 <div class="flex gap-1 justify-end mt-1">
@@ -272,15 +294,17 @@
               {:else}
                 <div class="flex items-center justify-between gap-1 mt-0.5">
                   <p class={'text-[17px] font-extrabold leading-tight truncate ' + colorStock(item.stock)}>{item.stock} <span class="text-[10px] font-medium text-slate-400">und</span></p>
-                  <button onclick={() => iniciarEdicionStock(item)} aria-label="Editar stock" class="p-1.5 -m-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer">
-                    <Icon name="pencil" class="w-4 h-4" />
-                  </button>
+                  {#if esAdmin}
+                    <button onclick={() => iniciarEdicionStock(item)} aria-label="Editar stock" class="p-1.5 -m-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer">
+                      <Icon name="pencil" class="w-4 h-4" />
+                    </button>
+                  {/if}
                 </div>
               {/if}
             </div>
             <div class="rounded-xl bg-slate-50/80 ring-1 ring-inset ring-slate-100 px-3 py-2.5">
               <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Precio venta</p>
-              {#if editando === getClave(item)}
+              {#if esAdmin && editando === getClave(item)}
                 <input type="number" bind:value={nuevoPrecio} min="0" class="input-base w-full py-1 text-right"
                   onkeydown={(e) => { if (e.key === 'Enter') guardarPrecio(item); if (e.key === 'Escape') cancelarEdicion(); }} />
                 <div class="flex gap-1 justify-end mt-1">
@@ -290,9 +314,11 @@
               {:else}
                 <div class="flex items-center justify-between gap-1 mt-0.5">
                   <p class="text-[15px] font-extrabold text-slate-900 leading-tight truncate">{formatCOP(item.precio_venta)}</p>
-                  <button onclick={() => iniciarEdicion(item)} aria-label="Editar precio" class="p-1.5 -m-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer">
-                    <Icon name="pencil" class="w-4 h-4" />
-                  </button>
+                  {#if esAdmin}
+                    <button onclick={() => iniciarEdicion(item)} aria-label="Editar precio" class="p-1.5 -m-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer">
+                      <Icon name="pencil" class="w-4 h-4" />
+                    </button>
+                  {/if}
                 </div>
               {/if}
             </div>
@@ -309,6 +335,7 @@
   {/if}
 </div>
 
+{#if esAdmin}
 <Modal show={showModal} title="Nuevo producto" subtitle="Agrega un lubricante al catálogo" onclose={() => (showModal = false)}>
   <div class="space-y-4">
     <div>
@@ -334,3 +361,4 @@
     </div>
   </div>
 </Modal>
+{/if}

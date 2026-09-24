@@ -1,6 +1,6 @@
 <script lang="ts">
   import { vistaActual, usuario, logout, negocio, setNegocio, logo } from '../stores';
-  import { NEGOCIOS } from '../negocios';
+  import { NEGOCIOS, NEGOCIOS_TIENDA, TODOS_LOS_NEGOCIOS } from '../negocios';
   import type { VistaActual } from '../types';
   import Icon from './ui/Icon.svelte';
 
@@ -16,47 +16,61 @@
     }
   });
 
-  type MenuItem = { icon: string; label: string; vista: VistaActual; roles: string[] };
+  type MenuItem = { icon: string; label: string; vista: VistaActual; roles: string[]; negocios: string[] };
+  // Roles: 'admin' (control total) y 'cajero' (operación, sin cambios de catálogo).
+  const ADMIN = ['admin'];
+  const OPERACION = ['admin', 'cajero'];
+  // Negocios: 'estacion' y 'otro' (Tienda) venden lubricantes; 'islas' es el
+  // negocio de combustible y solo muestra su propio menú.
   const grupos: { titulo: string; items: MenuItem[] }[] = [
+    {
+      titulo: 'Combustible',
+      items: [
+        { icon: 'fuel', label: 'Cierre de islas', vista: 'islas', roles: OPERACION, negocios: ['islas'] },
+        { icon: 'history', label: 'Historial de islas', vista: 'historial-islas', roles: ADMIN, negocios: ['islas'] },
+      ],
+    },
     {
       titulo: 'Principal',
       items: [
-        { icon: 'dashboard', label: 'Dashboard', vista: 'dashboard', roles: ['admin'] },
-        { icon: 'receipt', label: 'Mi resumen', vista: 'dashboard', roles: ['ventas'] },
+        { icon: 'dashboard', label: 'Dashboard', vista: 'dashboard', roles: ADMIN, negocios: NEGOCIOS_TIENDA },
+        { icon: 'receipt', label: 'Mi resumen', vista: 'dashboard', roles: ['cajero'], negocios: NEGOCIOS_TIENDA },
       ],
     },
     {
       titulo: 'Operación',
       items: [
-        { icon: 'cart', label: 'Registrar Venta', vista: 'registrar-venta', roles: ['admin', 'ventas'] },
-        { icon: 'package', label: 'Registrar Entrada', vista: 'registrar-entrada', roles: ['admin'] },
-        { icon: 'droplet', label: 'Inventario', vista: 'inventario', roles: ['admin'] },
+        { icon: 'cart', label: 'Registrar Venta', vista: 'registrar-venta', roles: OPERACION, negocios: NEGOCIOS_TIENDA },
+        { icon: 'package', label: 'Registrar Entrada', vista: 'registrar-entrada', roles: ADMIN, negocios: NEGOCIOS_TIENDA },
+        { icon: 'droplet', label: 'Inventario', vista: 'inventario', roles: OPERACION, negocios: NEGOCIOS_TIENDA },
       ],
     },
     {
       titulo: 'Historial',
       items: [
-        { icon: 'receipt', label: 'Historial Ventas', vista: 'historial', roles: ['admin'] },
-        { icon: 'history', label: 'Historial Entradas', vista: 'historial-entradas', roles: ['admin'] },
-        { icon: 'arrow-up-right', label: 'Salidas de inventario', vista: 'historial-salidas', roles: ['admin'] },
+        { icon: 'receipt', label: 'Historial Ventas', vista: 'historial', roles: ADMIN, negocios: NEGOCIOS_TIENDA },
+        { icon: 'history', label: 'Historial Entradas', vista: 'historial-entradas', roles: ADMIN, negocios: NEGOCIOS_TIENDA },
+        { icon: 'arrow-up-right', label: 'Salidas de inventario', vista: 'historial-salidas', roles: ADMIN, negocios: NEGOCIOS_TIENDA },
       ],
     },
     {
       titulo: 'Clientes',
-      items: [{ icon: 'users', label: 'Clientes', vista: 'clientes', roles: ['admin', 'ventas'] }],
+      items: [{ icon: 'users', label: 'Clientes', vista: 'clientes', roles: OPERACION, negocios: NEGOCIOS_TIENDA }],
     },
     {
       titulo: 'Reportes',
       items: [
-        { icon: 'chart', label: 'Estadísticas y reportes', vista: 'reportes', roles: ['admin'] },
-        { icon: 'chart', label: 'Estadísticas', vista: 'reportes', roles: ['ventas'] },
+        { icon: 'chart', label: 'Resumen general', vista: 'resumen', roles: ADMIN, negocios: TODOS_LOS_NEGOCIOS },
+        { icon: 'chart', label: 'Mi resumen general', vista: 'resumen', roles: ['cajero'], negocios: TODOS_LOS_NEGOCIOS },
+        { icon: 'chart', label: 'Estadísticas y reportes', vista: 'reportes', roles: ADMIN, negocios: NEGOCIOS_TIENDA },
+        { icon: 'chart', label: 'Estadísticas', vista: 'reportes', roles: ['cajero'], negocios: NEGOCIOS_TIENDA },
       ],
     },
     {
       titulo: 'Administración',
       items: [
-        { icon: 'users', label: 'Usuarios', vista: 'admin-usuarios', roles: ['admin'] },
-        { icon: 'cog', label: 'Configuración', vista: 'configuracion', roles: ['admin'] },
+        { icon: 'users', label: 'Usuarios', vista: 'admin-usuarios', roles: ADMIN, negocios: TODOS_LOS_NEGOCIOS },
+        { icon: 'cog', label: 'Configuración', vista: 'configuracion', roles: ADMIN, negocios: TODOS_LOS_NEGOCIOS },
       ],
     },
   ];
@@ -69,7 +83,9 @@
   function cambiarNegocio(e: Event) {
     const id = (e.target as HTMLSelectElement).value;
     setNegocio(id);
-    vistaActual.set('dashboard');
+    // El negocio de islas no tiene ventas ni inventario de lubricantes: se
+    // aterriza directo en el cierre de islas.
+    vistaActual.set(id === 'islas' ? 'islas' : 'dashboard');
     onclose();
   }
 
@@ -80,7 +96,7 @@
   }
 
   let nombre = $derived($usuario?.nombre || $usuario?.usuario || 'Usuario');
-  let rol = $derived($usuario?.rol === 'admin' ? 'Administrador' : $usuario?.rol === 'ventas' ? 'Ventas' : 'Usuario');
+  let rol = $derived($usuario?.rol === 'admin' ? 'Administrador' : $usuario?.rol === 'cajero' || $usuario?.rol === 'ventas' ? 'Cajero' : 'Usuario');
   let iniciales = $derived(
     nombre
       .trim()
@@ -152,7 +168,7 @@
   <!-- Navegación -->
   <nav class="flex-1 overflow-y-auto scrollbar-thin px-3 pb-3 space-y-5">
     {#each grupos as grupo}
-      {@const visibles = grupo.items.filter((i) => (i.roles ?? []).includes($usuario?.rol || ''))}
+      {@const visibles = grupo.items.filter((i) => (i.roles ?? []).includes($usuario?.rol || '') && (i.negocios ?? []).includes($negocio))}
       {#if visibles.length > 0}
         <div>
           <p class="px-3 pb-1.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-400">{grupo.titulo}</p>

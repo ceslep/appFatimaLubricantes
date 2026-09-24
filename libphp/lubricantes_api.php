@@ -1,5 +1,5 @@
 <?php
-// v3.5 - API Lubricantes - Fix cajero registros viejos (count cols) y dashboard
+// v4.2 - API Lubricantes - Resumen general: desglose por cajero y por forma de pago
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -20,6 +20,9 @@ $input = json_decode(file_get_contents('php://input'), true);
 $lub_negocios = [
     'estacion' => LUB_SPREADSHEET_ID,
     'otro'     => '1f9EfI03bDXehvF9cGEdbU2KHsS3BHMDxGQU7wsf8BQA',
+    // Las islas de combustible son un negocio aparte, pero sus datos viven en el
+    // spreadsheet principal (pestaña 'islas' y su config de precios).
+    'islas'    => LUB_SPREADSHEET_ID,
 ];
 $negocioSolicitado = strtolower(trim($_GET['negocio'] ?? 'estacion'));
 if (!array_key_exists($negocioSolicitado, $lub_negocios)) $negocioSolicitado = 'estacion';
@@ -60,6 +63,143 @@ function ensure_headers($sheet, $headers) {
     curl_exec($ch);
     curl_close($ch);
     if ($flag !== '') @touch($flag);
+}
+
+// Encabezados de la hoja 'islas'. A diferencia de ensure_headers(), compara la
+// fila completa: si la hoja se creó con el layout anterior (9 columnas, sin
+// 'Usuario') reescribe solo la fila 1 para agregar la columna nueva, sin tocar
+// los datos ya registrados.
+function ensure_headers_islas() {
+    $flag = lub_cache_path('headers_' . md5(lub_active_sheet() . '|' . LUB_HOJA_ISLAS . '|v3'));
+    if ($flag !== '' && is_file($flag) && (time() - filemtime($flag)) < 43200) return;
+
+    $cols = chr(64 + count(LUB_HEADERS_ISLAS));
+    $check = lub_get(LUB_HOJA_ISLAS, 'A1:' . $cols . '1');
+    $actual = $check['data']['values'][0] ?? [];
+    if ($actual === LUB_HEADERS_ISLAS) {
+        if ($flag !== '') @touch($flag);
+        return;
+    }
+
+    $token = lub_get_token();
+    if (!$token) return;
+    $url = lub_values_api() . urlencode(LUB_HOJA_ISLAS . '!A1:' . $cols . '1') . '?valueInputOption=RAW';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PUT',
+        CURLOPT_POSTFIELDS     => json_encode(['values' => [LUB_HEADERS_ISLAS]]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $token,
+            'Content-Type: application/json',
+        ],
+    ]);
+    curl_exec($ch);
+    curl_close($ch);
+    if ($flag !== '') @touch($flag);
+}
+
+// Normaliza un nombre de cajero para comparar (espacios y mayúsculas).
+function lub_norm_cajero($valor) {
+    $s = trim((string)$valor);
+    return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+}
+
+// ¿Alguno de los valores coincide con el filtro de cajero? (filtro vacío = todos).
+// Acepta varios valores porque una lectura de isla guarda el nombre visible
+// (Cajero) y el usuario de login (Usuario): cualquiera de los dos sirve.
+function lub_coincide_cajero($filtro, ...$valores) {
+    if (trim((string)$filtro) === '') return true;
+    $f = lub_norm_cajero($filtro);
+    foreach ($valores as $v) {
+        if (lub_norm_cajero($v) === $f) return true;
+    }
+    return false;
+}
+
+// Columna 'Cajero' de una fila de ventas, tolerando los layouts antiguos.
+function lub_cajero_de_venta($row) {
+    $n = count($row);
+    if ($n >= 10) return $row[9] ?? '';
+    if ($n === 9) return $row[8] ?? '';
+    return $row[7] ?? '';
+}
+
+// Columna 'Forma de pago' de una fila de ventas, tolerando los layouts antiguos
+// (las filas sin forma de pago devuelven cadena vacía).
+function lub_forma_pago_de_venta($row) {
+    $n = count($row);
+    if ($n >= 10) return trim((string)($row[6] ?? ''));
+    if ($n === 9) return trim((string)($row[5] ?? ''));
+    return '';
+}
+
+// Clave de una lectura de isla: día + isla + combustible + AUTOR.
+// El autor es parte de la clave a propósito: volver a guardar el mismo día
+// corrige la propia fila, pero nunca reemplaza la de otro cajero.
+function lub_clave_lectura($dia, $isla, $comb, $autor) {
+    return $dia . '|' . strtolower(trim((string)$isla)) . '|' . strtolower(trim((string)$comb)) . '|' . strtolower(trim((string)$autor));
+}
+
+// Mapa login (en minúsculas) -> nombre completo, desde la hoja de usuarios.
+function lub_mapa_usuarios() {
+    $mapa = [];
+    $res = lub_get_all(LUB_HOJA_USUARIOS);
+    if (isset($res['data']['values'])) {
+        foreach ($res['data']['values'] as $i => $row) {
+            if ($i === 0 && strtolower(trim($row[0] ?? '')) === 'usuario') continue;
+            $login = strtolower(trim((string)($row[0] ?? '')));
+            if ($login === '') continue;
+            $mapa[$login] = trim((string)($row[3] ?? ''));
+        }
+    }
+    return $mapa;
+}
+
+// Identidad canónica de un cajero, para poder sumar en una misma fila lo que
+// viene de islas (que guarda login + nombre) y de ventas (que solo guarda nombre).
+function lub_autor_canonico($login, $nombre, $mapa) {
+    $loginKey = strtolower(trim((string)$login));
+    $nombre = trim((string)$nombre);
+    if ($loginKey !== '' && isset($mapa[$loginKey]) && trim((string)$mapa[$loginKey]) !== '') {
+        return trim((string)$mapa[$loginKey]);
+    }
+    if ($nombre !== '') return $nombre;
+    if ($loginKey !== '') return trim((string)$login);
+    return 'Sin asignar';
+}
+
+// Acumula un monto en la fila del cajero dentro del desglose por cajero.
+function lub_sumar_por_cajero(&$mapa, $autor, $campo, $monto) {
+    if (!isset($mapa[$autor])) {
+        $mapa[$autor] = [
+            'cajero' => $autor,
+            'islas' => 0.0,
+            'islas_galones' => 0.0,
+            'estacion' => 0.0,
+            'tienda' => 0.0,
+            'num_ventas' => 0,
+        ];
+    }
+    $mapa[$autor][$campo] += $monto;
+}
+
+function lub_precios_combustible() {
+    // Precios vigentes por combustible, definidos en Configuración (hoja config).
+    $precios = ['Gasolina' => 0.0, 'ACPM' => 0.0];
+    $claves = ['Gasolina' => LUB_CFG_PRECIO_GASOLINA, 'ACPM' => LUB_CFG_PRECIO_ACPM];
+    $res = lub_get_all(LUB_HOJA_CONFIG);
+    if (isset($res['data']['values'])) {
+        foreach ($res['data']['values'] as $i => $row) {
+            if ($i === 0) continue;
+            $clave = strtolower(trim($row[0] ?? ''));
+            if ($clave === '') continue;
+            foreach ($claves as $comb => $cfgKey) {
+                if ($clave === $cfgKey) $precios[$comb] = lub_money($row[1] ?? 0);
+            }
+        }
+    }
+    return $precios;
 }
 
 try {
@@ -110,6 +250,21 @@ try {
             }
             $out['mensaje_registro'] = $valores['mensaje_registro'] ?? '';
             $out['logo_data'] = $valores['logo_data'] ?? '';
+            // Islas de combustible: precios vigentes y catálogo de islas.
+            $out['precio_gasolina'] = $valores[LUB_CFG_PRECIO_GASOLINA] ?? '';
+            $out['precio_acpm'] = $valores[LUB_CFG_PRECIO_ACPM] ?? '';
+            $islas = [];
+            $rawIslas = $valores[LUB_CFG_ISLAS] ?? '';
+            if ($rawIslas !== '') {
+                $decoded = json_decode($rawIslas, true);
+                if (is_array($decoded)) {
+                    foreach ($decoded as $nombre) {
+                        $nombre = trim((string)$nombre);
+                        if ($nombre !== '') $islas[] = $nombre;
+                    }
+                }
+            }
+            $out['islas'] = $islas;
             echo json_encode(['success' => true, 'data' => $out]);
             exit;
 
@@ -150,6 +305,37 @@ try {
                     }
                 }
                 $cambios['logo_data'] = $logo;
+            }
+            // Precios de combustible (por galón) usados para valorar las lecturas de las islas.
+            foreach ([LUB_CFG_PRECIO_GASOLINA, LUB_CFG_PRECIO_ACPM] as $clave) {
+                if (array_key_exists($clave, $input)) {
+                    $valor = lub_money($input[$clave]);
+                    if ($valor < 0) {
+                        http_response_code(400);
+                        echo json_encode(['success' => false, 'error' => 'El precio de ' . $clave . ' no puede ser negativo']);
+                        exit;
+                    }
+                    $cambios[$clave] = (string)$valor;
+                }
+            }
+            // Catálogo de islas: lista de nombres guardada como JSON.
+            if (array_key_exists(LUB_CFG_ISLAS, $input)) {
+                $rawIslas = $input[LUB_CFG_ISLAS];
+                if (is_string($rawIslas)) $rawIslas = json_decode($rawIslas, true);
+                if (!is_array($rawIslas)) {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'error' => 'Formato de islas invalido']);
+                    exit;
+                }
+                $limpias = [];
+                foreach ($rawIslas as $nombre) {
+                    $nombre = trim((string)$nombre);
+                    if ($nombre === '') continue;
+                    if (strlen($nombre) > 40) $nombre = substr($nombre, 0, 40);
+                    if (!in_array($nombre, $limpias, true)) $limpias[] = $nombre;
+                    if (count($limpias) >= 40) break;
+                }
+                $cambios[LUB_CFG_ISLAS] = json_encode($limpias);
             }
             if (empty($cambios)) {
                 http_response_code(400);
@@ -612,7 +798,8 @@ try {
                         'fecha' => $row[0] ?? '',
                         'producto' => $row[1] ?? '',
                         'cantidad' => lub_num($row[2] ?? 0),
-                        'precio_venta' => lub_num($row[3] ?? 0),
+                        // Dinero: la columna puede venir con formato de moneda ("$ 25.000").
+                        'precio_venta' => lub_money($row[3] ?? 0),
                         'tipo' => $row[4] ?? '',
                         'cajero' => $row[5] ?? '',
                     ];
@@ -688,6 +875,278 @@ try {
                 'total_items' => $totalItems,
                 'num_ventas' => $numVentas,
                 'total_entradas' => $totalEntradas,
+            ]]);
+            exit;
+
+        // ---- Islas de combustible ----
+        case 'listar_islas':
+            lub_ensure_sheet(LUB_HOJA_ISLAS);
+            ensure_headers_islas();
+            // Filtro opcional por autor: el cajero pide solo lo suyo (usuario y/o
+            // nombre) y el admin no manda nada, así que ve todo.
+            $filtrosAutor = [];
+            foreach ([trim($_GET['usuario'] ?? ''), trim($_GET['cajero'] ?? '')] as $f) {
+                if ($f !== '') $filtrosAutor[] = $f;
+            }
+            $res = lub_get_all(LUB_HOJA_ISLAS);
+            $lecturas = [];
+            if (isset($res['data']['values'])) {
+                foreach ($res['data']['values'] as $i => $row) {
+                    if ($i === 0 && strtolower(trim($row[0] ?? '')) === 'fecha') continue;
+                    $isla = trim($row[1] ?? '');
+                    if ($isla === '') continue;
+                    if (!empty($filtrosAutor)) {
+                        $coincide = false;
+                        foreach ($filtrosAutor as $f) {
+                            if (lub_coincide_cajero($f, $row[9] ?? '', $row[8] ?? '')) { $coincide = true; break; }
+                        }
+                        if (!$coincide) continue;
+                    }
+                    $lecturas[] = [
+                        'row' => $i + 1,
+                        'fecha' => $row[0] ?? '',
+                        'isla' => $isla,
+                        'combustible' => trim($row[2] ?? ''),
+                        'lectura_inicial' => lub_num($row[3] ?? 0),
+                        'lectura_final' => lub_num($row[4] ?? 0),
+                        'galones' => lub_num($row[5] ?? 0),
+                        'precio' => lub_money($row[6] ?? 0),
+                        'total' => lub_money($row[7] ?? 0),
+                        'cajero' => $row[8] ?? '',
+                        'usuario' => trim($row[9] ?? ''),
+                    ];
+                }
+            }
+            echo json_encode(['success' => true, 'data' => $lecturas]);
+            exit;
+
+        case 'registrar_isla':
+            lub_ensure_sheet(LUB_HOJA_ISLAS);
+            ensure_headers_islas();
+            $isla = trim($input['isla'] ?? '');
+            if ($isla === '') {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Isla requerida']);
+                exit;
+            }
+            $dia = trim($input['fecha'] ?? '');
+            if (lub_fecha_clave($dia) === 0) $dia = date('d/m/Y');
+            $claveDiaNueva = lub_fecha_clave($dia);
+            $now = $dia . ' ' . date('H:i');
+            // 'cajero' = nombre visible; 'usuario' = login, con el que el admin filtra.
+            $cajero = $input['cajero'] ?? '';
+            $usuarioLogin = trim($input['usuario'] ?? '');
+            // Autor de la lectura: se usa para no pisar el registro de otro cajero.
+            $autor = $usuarioLogin !== '' ? $usuarioLogin : trim((string)$cajero);
+            $lecturas = $input['lecturas'] ?? [];
+            if (!is_array($lecturas)) $lecturas = [];
+            $precios = lub_precios_combustible();
+
+            $existentes = [];
+            $resIslas = lub_get_all(LUB_HOJA_ISLAS);
+            if (isset($resIslas['data']['values'])) {
+                foreach ($resIslas['data']['values'] as $i => $row) {
+                    if ($i === 0) continue;
+                    // Mismo criterio de autor que al guardar: login si existe, si no el nombre.
+                    $autorFila = trim((string)($row[9] ?? ''));
+                    if ($autorFila === '') $autorFila = trim((string)($row[8] ?? ''));
+                    $clave = lub_clave_lectura(lub_fecha_clave($row[0] ?? ''), $row[1] ?? '', $row[2] ?? '', $autorFila);
+                    $existentes[$clave] = $i + 1;
+                }
+            }
+
+            $guardados = [];
+            foreach (LUB_COMBUSTIBLES as $comb) {
+                $dato = $lecturas[$comb] ?? null;
+                if (!is_array($dato)) continue;
+                if (trim((string)($dato['inicial'] ?? '')) === '' || trim((string)($dato['final'] ?? '')) === '') continue;
+                $ini = lub_num($dato['inicial']);
+                $fin = lub_num($dato['final']);
+                if ($fin < $ini) {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'error' => 'En ' . $comb . ' la lectura final no puede ser menor que la inicial']);
+                    exit;
+                }
+                $galones = round($fin - $ini, 3);
+                $precio = $precios[$comb] ?? 0.0;
+                $total = round($galones * $precio, 2);
+                $values = [$now, $isla, $comb, $ini, $fin, $galones, $precio, $total, $cajero, $usuarioLogin];
+                $clave = lub_clave_lectura($claveDiaNueva, $isla, $comb, $autor);
+                if (isset($existentes[$clave])) {
+                    lub_update(LUB_HOJA_ISLAS, $existentes[$clave], $values);
+                } else {
+                    $r = lub_append(LUB_HOJA_ISLAS, $values);
+                    if (($r['code'] ?? 0) !== 200) {
+                        http_response_code(500);
+                        echo json_encode(['success' => false, 'error' => 'Error al guardar la lectura de ' . $comb]);
+                        exit;
+                    }
+                }
+                $guardados[] = $comb;
+            }
+            if (empty($guardados)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Ingrese al menos una lectura (inicial y final)']);
+                exit;
+            }
+            echo json_encode(['success' => true, 'message' => 'Lecturas guardadas: ' . implode(' y ', $guardados), 'guardados' => $guardados]);
+            exit;
+
+        case 'eliminar_isla':
+            $row = intval($input['row'] ?? 0);
+            if ($row < 2) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'error' => 'Row invalida']);
+                exit;
+            }
+            lub_delete_row(LUB_HOJA_ISLAS, $row, 10);
+            echo json_encode(['success' => true, 'message' => 'Lectura eliminada']);
+            exit;
+
+        case 'resumen_general':
+            // Resumen del administrador: islas (combustible) + tienda + estación.
+            // Admite filtro por cajero (opcional) aplicado a las tres fuentes.
+            $GLOBALS['LUB_ACTIVE_SHEET'] = LUB_SPREADSHEET_ID;
+            $desde = trim($_GET['desde'] ?? '');
+            $hasta = trim($_GET['hasta'] ?? '');
+            $cajeroFiltro = trim($_GET['cajero'] ?? '');
+            if (lub_fecha_clave($desde) === 0) $desde = date('d/m/Y');
+            if (lub_fecha_clave($hasta) === 0) $hasta = date('d/m/Y');
+            $desdeKey = lub_fecha_clave($desde);
+            $hastaKey = lub_fecha_clave($hasta);
+            if ($hastaKey < $desdeKey) {
+                $tmp = $desdeKey; $desdeKey = $hastaKey; $hastaKey = $tmp;
+                $tmpDia = $desde; $desde = $hasta; $hasta = $tmpDia;
+            }
+
+            // Identidad unificada de los cajeros (la hoja de usuarios vive en el
+            // spreadsheet principal, así que se lee antes de cambiar de negocio).
+            $mapaUsuarios = lub_mapa_usuarios();
+            $porCajero = [];
+            $porFormaPago = [];
+
+            $sumarVentas = function ($destino) use ($desdeKey, $hastaKey, $cajeroFiltro, $mapaUsuarios, &$porCajero, &$porFormaPago) {
+                $res = lub_get_all(LUB_HOJA_VENTAS);
+                $total = 0.0;
+                $items = 0.0;
+                $num = 0;
+                if (isset($res['data']['values'])) {
+                    foreach ($res['data']['values'] as $i => $row) {
+                        if ($i === 0 && strtolower(trim($row[0] ?? '')) === 'fecha') continue;
+                        $k = lub_fecha_clave($row[0] ?? '');
+                        if ($k === 0 || $k < $desdeKey || $k > $hastaKey) continue;
+                        $cajeroVenta = lub_cajero_de_venta($row);
+                        if (!lub_coincide_cajero($cajeroFiltro, $cajeroVenta)) continue;
+                        $idxTotal = count($row) >= 10 ? 5 : 4;
+                        $idxCant = count($row) >= 10 ? 3 : 2;
+                        // Dinero con lub_money: los totales de ventas están con formato
+                        // de moneda ("$ 795.000") y lub_num los leería 1000 veces menor.
+                        $monto = lub_money($row[$idxTotal] ?? 0);
+                        $total += $monto;
+                        $items += lub_num($row[$idxCant] ?? 0);
+                        $num++;
+                        $autor = lub_autor_canonico('', $cajeroVenta, $mapaUsuarios);
+                        lub_sumar_por_cajero($porCajero, $autor, $destino, $monto);
+                        lub_sumar_por_cajero($porCajero, $autor, 'num_ventas', 1);
+
+                        // Desglose por forma de pago (solo ventas: las islas no tienen).
+                        $forma = lub_forma_pago_de_venta($row);
+                        if ($forma === '') $forma = 'Sin especificar';
+                        if (!isset($porFormaPago[$forma])) {
+                            $porFormaPago[$forma] = ['forma' => $forma, 'estacion' => 0.0, 'tienda' => 0.0, 'num_ventas' => 0];
+                        }
+                        $porFormaPago[$forma][$destino] += $monto;
+                        $porFormaPago[$forma]['num_ventas']++;
+                    }
+                }
+                return ['total_ventas' => round($total, 2), 'total_items' => round($items, 3), 'num_ventas' => $num];
+            };
+
+            // Islas: totales por combustible dentro del rango.
+            lub_ensure_sheet(LUB_HOJA_ISLAS);
+            ensure_headers_islas();
+            $resIslas = lub_get_all(LUB_HOJA_ISLAS);
+            $combustibles = [];
+            $totalIslas = 0.0;
+            $registrosIslas = 0;
+            if (isset($resIslas['data']['values'])) {
+                foreach ($resIslas['data']['values'] as $i => $row) {
+                    if ($i === 0) continue;
+                    if (trim($row[1] ?? '') === '') continue;
+                    $k = lub_fecha_clave($row[0] ?? '');
+                    if ($k === 0 || $k < $desdeKey || $k > $hastaKey) continue;
+                    // Coincide por nombre visible (Cajero) o por login (Usuario).
+                    if (!lub_coincide_cajero($cajeroFiltro, $row[8] ?? '', $row[9] ?? '')) continue;
+                    $comb = trim($row[2] ?? '');
+                    if ($comb === '') $comb = 'Sin especificar';
+                    if (!isset($combustibles[$comb])) $combustibles[$comb] = ['galones' => 0.0, 'total' => 0.0, 'registros' => 0];
+                    $galones = lub_num($row[5] ?? 0);
+                    $montoIsla = lub_money($row[7] ?? 0);
+                    $combustibles[$comb]['galones'] += $galones;
+                    $combustibles[$comb]['total'] += $montoIsla;
+                    $combustibles[$comb]['registros']++;
+                    $totalIslas += $montoIsla;
+                    $registrosIslas++;
+                    // Desglose por cajero: el autor sale del login (Usuario) o del nombre.
+                    $autorIsla = lub_autor_canonico($row[9] ?? '', $row[8] ?? '', $mapaUsuarios);
+                    lub_sumar_por_cajero($porCajero, $autorIsla, 'islas', $montoIsla);
+                    lub_sumar_por_cajero($porCajero, $autorIsla, 'islas_galones', $galones);
+                }
+            }
+            foreach ($combustibles as $comb => $d) {
+                $combustibles[$comb]['galones'] = round($d['galones'], 3);
+                $combustibles[$comb]['total'] = round($d['total'], 2);
+            }
+
+            // Estación y tienda usan spreadsheets distintos: se alterna el activo.
+            $GLOBALS['LUB_ACTIVE_SHEET'] = LUB_SPREADSHEET_ID;
+            $estacion = $sumarVentas('estacion');
+            $GLOBALS['LUB_ACTIVE_SHEET'] = $lub_negocios['otro'];
+            $tienda = $sumarVentas('tienda');
+            $GLOBALS['LUB_ACTIVE_SHEET'] = LUB_SPREADSHEET_ID;
+
+            // Desglose por cajero: una fila por cajero con las tres fuentes sumadas.
+            $porCajeroLista = [];
+            foreach ($porCajero as $fila) {
+                $fila['islas'] = round($fila['islas'], 2);
+                $fila['islas_galones'] = round($fila['islas_galones'], 3);
+                $fila['estacion'] = round($fila['estacion'], 2);
+                $fila['tienda'] = round($fila['tienda'], 2);
+                $fila['total'] = round($fila['islas'] + $fila['estacion'] + $fila['tienda'], 2);
+                $porCajeroLista[] = $fila;
+            }
+            usort($porCajeroLista, function ($a, $b) {
+                if ($a['total'] === $b['total']) return strcmp($a['cajero'], $b['cajero']);
+                return $b['total'] <=> $a['total'];
+            });
+
+            // Desglose por forma de pago (solo ventas de tienda y estación).
+            $porFormaPagoLista = [];
+            foreach ($porFormaPago as $fila) {
+                $fila['estacion'] = round($fila['estacion'], 2);
+                $fila['tienda'] = round($fila['tienda'], 2);
+                $fila['total'] = round($fila['estacion'] + $fila['tienda'], 2);
+                $porFormaPagoLista[] = $fila;
+            }
+            usort($porFormaPagoLista, function ($a, $b) {
+                if ($a['total'] === $b['total']) return strcmp($a['forma'], $b['forma']);
+                return $b['total'] <=> $a['total'];
+            });
+
+            echo json_encode(['success' => true, 'data' => [
+                'desde' => $desde,
+                'hasta' => $hasta,
+                'cajero' => $cajeroFiltro,
+                'islas' => [
+                    'total' => round($totalIslas, 2),
+                    'registros' => $registrosIslas,
+                    'combustibles' => $combustibles,
+                ],
+                'por_cajero' => $porCajeroLista,
+                'por_forma_pago' => $porFormaPagoLista,
+                'estacion' => $estacion,
+                'tienda' => $tienda,
+                'total' => round($totalIslas + $estacion['total_ventas'] + $tienda['total_ventas'], 2),
             ]]);
             exit;
 

@@ -14,13 +14,22 @@ const ACCIONES_COMPARTIDAS = new Set([
   'eliminar_cliente',
 ]);
 
+// Las islas de combustible y el resumen general viven siempre en el spreadsheet
+// principal (Estación Fátima), sin importar el negocio seleccionado en el menú.
+const ACCIONES_ESTACION = new Set([
+  'listar_islas',
+  'registrar_isla',
+  'eliminar_isla',
+  'resumen_general',
+]);
+
 export function negocioActual(): string {
   const n = localStorage.getItem('lub_negocio');
-  return n === 'otro' ? n : 'estacion';
+  return n === 'otro' || n === 'islas' ? n : 'estacion';
 }
 
 async function apiCall(action: string, params: Record<string, unknown> = {}, method: string = 'GET', negocioOverride?: string): Promise<unknown> {
-  const negocio = negocioOverride ?? (ACCIONES_COMPARTIDAS.has(action) ? 'estacion' : negocioActual());
+  const negocio = negocioOverride ?? ((ACCIONES_COMPARTIDAS.has(action) || ACCIONES_ESTACION.has(action)) ? 'estacion' : negocioActual());
   let url = `${API_BASE}?action=${action}&negocio=${encodeURIComponent(negocio)}`;
   let body: string | undefined;
 
@@ -44,7 +53,15 @@ async function apiCall(action: string, params: Record<string, unknown> = {}, met
   });
 
   const data = await resp.json();
-  if (!data.success) throw new Error(data.error || 'Error desconocido');
+  if (!data.success) {
+    let mensaje: string = data.error || 'Error desconocido';
+    // El backend PHP se despliega a mano: si la acción no existe allá, avisamos
+    // de que falta subir la versión actualizada en vez de dejar un error críptico.
+    if (typeof mensaje === 'string' && mensaje.indexOf('Accion no valida') !== -1) {
+      mensaje += ' — el servidor no tiene esta función: sube libphp/lubricantes_api.php actualizado a appf/.';
+    }
+    throw new Error(mensaje);
+  }
   return data.data ?? data;
 }
 
@@ -64,6 +81,17 @@ export const api = {
   eliminarEntrada: (row: number) => apiCall('eliminar_entrada', { row }, 'POST'),
   inventario: () => apiCall('inventario') as Promise<{ producto: string; presentacion: string; stock: number; precio_venta: number }[]>,
   resumenDia: () => apiCall('resumen_dia') as Promise<{ total_ventas: number; total_items: number; num_ventas: number; total_entradas: number }>,
+  // ---- Islas de combustible ----
+  // Sin autor devuelve todo (admin); con autor, solo las lecturas de ese cajero.
+  listarIslas: (autor?: { usuario?: string; cajero?: string }) => {
+    const params: Record<string, string> = {};
+    if (autor?.usuario) params.usuario = autor.usuario;
+    if (autor?.cajero) params.cajero = autor.cajero;
+    return apiCall('listar_islas', params) as Promise<{ row: number; fecha: string; isla: string; combustible: string; lectura_inicial: number; lectura_final: number; galones: number; precio: number; total: number; cajero: string; usuario: string }[]>;
+  },
+  registrarIsla: (d: { fecha: string; isla: string; cajero: string; usuario: string; lecturas: Record<string, { inicial: number | string; final: number | string }> }) => apiCall('registrar_isla', d, 'POST') as Promise<{ message: string; guardados: string[] }>,
+  eliminarIsla: (row: number) => apiCall('eliminar_isla', { row }, 'POST'),
+  resumenGeneral: (desde: string, hasta: string, cajero = '') => apiCall('resumen_general', { desde, hasta, cajero }) as Promise<{ desde: string; hasta: string; cajero: string; islas: { total: number; registros: number; combustibles: Record<string, { galones: number; total: number; registros: number }> }; por_cajero: { cajero: string; islas: number; islas_galones: number; estacion: number; tienda: number; total: number; num_ventas: number }[]; por_forma_pago: { forma: string; estacion: number; tienda: number; total: number; num_ventas: number }[]; estacion: { total_ventas: number; total_items: number; num_ventas: number }; tienda: { total_ventas: number; total_items: number; num_ventas: number }; total: number }>,
   login: (usuario: string, password: string) => apiCall('login', { usuario, password }, 'POST') as Promise<{ usuario: string; rol: string; nombre: string }>,
   listarUsuarios: () => apiCall('listar_usuarios') as Promise<{ row: number; usuario: string; rol: string; nombre: string; activo: string }[]>,
   crearUsuario: (user: { usuario: string; password: string; rol: string; nombre: string }) => apiCall('crear_usuario', user, 'POST'),
@@ -74,8 +102,11 @@ export const api = {
   registrarCliente: (c: { identificacion: string; nombres: string; telefono: string; correo: string; direccion: string; notas: string; placa1?: string; placa2?: string; placa3?: string; placa4?: string }) => apiCall('registrar_cliente', c, 'POST'),
   actualizarCliente: (c: { row: number; identificacion: string; nombres: string; telefono: string; correo: string; direccion: string; notas: string; placa1?: string; placa2?: string; placa3?: string; placa4?: string }) => apiCall('actualizar_cliente', c, 'POST'),
   eliminarCliente: (row: number) => apiCall('eliminar_cliente', { row }, 'POST'),
-  obtenerConfig: () => apiCall('obtener_config') as Promise<{ enviar_whatsapp: string; cliente_obligatorio: string; mensaje_registro: string; logo_data: string }>,
+  obtenerConfig: () => apiCall('obtener_config') as Promise<{ enviar_whatsapp: string; cliente_obligatorio: string; mensaje_registro: string; logo_data: string; precio_gasolina?: string; precio_acpm?: string; islas?: string[] }>,
   // Página pública de registro: siempre usa la configuración del negocio principal.
   obtenerConfigPublica: () => apiCall('obtener_config', {}, 'GET', 'estacion') as Promise<{ enviar_whatsapp: string; cliente_obligatorio: string; mensaje_registro: string; logo_data: string }>,
-  guardarConfig: (c: { enviar_whatsapp?: 'TRUE' | 'FALSE'; cliente_obligatorio?: 'TRUE' | 'FALSE'; mensaje_registro?: string; logo_data?: string }) => apiCall('guardar_config', c, 'POST'),
+  // Islas de combustible: siempre viven en el spreadsheet principal (Estación Fátima).
+  obtenerConfigEstacion: () => apiCall('obtener_config', {}, 'GET', 'estacion') as Promise<{ precio_gasolina?: string; precio_acpm?: string; islas?: string[] }>,
+  guardarConfigEstacion: (c: { precio_gasolina?: string; precio_acpm?: string; islas?: string[] }) => apiCall('guardar_config', c, 'POST', 'estacion'),
+  guardarConfig: (c: { enviar_whatsapp?: 'TRUE' | 'FALSE'; cliente_obligatorio?: 'TRUE' | 'FALSE'; mensaje_registro?: string; logo_data?: string; precio_gasolina?: string; precio_acpm?: string; islas?: string[] }) => apiCall('guardar_config', c, 'POST'),
 };

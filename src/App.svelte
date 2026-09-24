@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { isLoggedIn, isVentas, vistaActual, usuario, restoreSession, restoreNegocio, negocio, logo, restoreLogo, setLogo, modoTablet, setModoTablet, restoreModoTablet } from './lib/stores';
   import { api } from './lib/api';
+  import type { VistaActual } from './lib/types';
   import { NEGOCIOS, nombreNegocio } from './lib/negocios';
   import Login from './lib/components/Login.svelte';
   import RegistroCliente from './lib/components/RegistroCliente.svelte';
@@ -11,11 +12,14 @@
   import RegistrarVenta from './lib/components/RegistrarVenta.svelte';
   import RegistrarEntrada from './lib/components/RegistrarEntrada.svelte';
   import Inventario from './lib/components/Inventario.svelte';
+  import Islas from './lib/components/Islas.svelte';
   import Historial from './lib/components/Historial.svelte';
   import HistorialEntradas from './lib/components/HistorialEntradas.svelte';
   import HistorialSalidas from './lib/components/HistorialSalidas.svelte';
+  import HistorialIslas from './lib/components/HistorialIslas.svelte';
   import AdminUsuarios from './lib/components/AdminUsuarios.svelte';
   import Reportes from './lib/components/Reportes.svelte';
+  import ResumenGeneral from './lib/components/ResumenGeneral.svelte';
   import Configuracion from './lib/components/Configuracion.svelte';
   import Clientes from './lib/components/Clientes.svelte';
   import Icon from './lib/components/ui/Icon.svelte';
@@ -29,10 +33,13 @@
     'registrar-venta': 'Registrar Venta',
     'registrar-entrada': 'Registrar Entrada',
     'inventario': 'Inventario',
+    'islas': 'Cierre de islas',
     'historial': 'Historial Ventas',
     'historial-entradas': 'Historial Entradas',
     'historial-salidas': 'Salidas de inventario',
+    'historial-islas': 'Historial de islas',
     'reportes': 'Reportes y estadísticas',
+    'resumen': 'Resumen general',
     'clientes': 'Clientes',
     'admin-usuarios': 'Usuarios',
     'configuracion': 'Configuración',
@@ -43,10 +50,13 @@
     'registrar-venta': 'cart',
     'registrar-entrada': 'package',
     'inventario': 'droplet',
+    'islas': 'fuel',
     'historial': 'receipt',
     'historial-entradas': 'history',
     'historial-salidas': 'arrow-up-right',
+    'historial-islas': 'history',
     'reportes': 'chart',
+    'resumen': 'chart',
     'clientes': 'users',
     'admin-usuarios': 'users',
     'configuracion': 'cog',
@@ -57,14 +67,16 @@
       ? 'Mi resumen'
       : $vistaActual === 'reportes' && $usuario?.rol !== 'admin'
         ? 'Mis estadísticas'
-        : (vistas[$vistaActual] || 'Dashboard')
+        : $vistaActual === 'resumen' && $usuario?.rol !== 'admin'
+          ? 'Mi resumen general'
+          : (vistas[$vistaActual] || 'Dashboard')
   );
 
   const hoyRaw = new Date().toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
   const hoy = hoyRaw.charAt(0).toUpperCase() + hoyRaw.slice(1);
 
   let nombre = $derived($usuario?.nombre || $usuario?.usuario || 'Usuario');
-  let rol = $derived($usuario?.rol === 'admin' ? 'Administrador' : $usuario?.rol === 'ventas' ? 'Ventas' : 'Usuario');
+  let rol = $derived($usuario?.rol === 'admin' ? 'Administrador' : $usuario?.rol === 'cajero' || $usuario?.rol === 'ventas' ? 'Cajero' : 'Usuario');
   let iniciales = $derived(
     nombre
       .trim()
@@ -105,6 +117,44 @@
     if (!actual) return;
     const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (link) link.href = actual;
+  });
+
+  // Vistas que solo puede abrir un administrador. Evita que un cajero (u otro
+  // rol) llegue a pantallas de edición aunque la vista quedara guardada.
+  const VISTAS_SOLO_ADMIN = new Set<VistaActual>([
+    'registrar-entrada',
+    'historial',
+    'historial-entradas',
+    'historial-salidas',
+    'historial-islas',
+    'admin-usuarios',
+    'configuracion',
+  ]);
+
+  // Vistas alcanzables con el negocio "Islas Fátima" seleccionado.
+  const VISTAS_ISLAS = new Set<VistaActual>([
+    'islas',
+    'historial-islas',
+    'resumen',
+    'admin-usuarios',
+    'configuracion',
+  ]);
+
+  $effect(() => {
+    const vista = $vistaActual;
+    const actual = $usuario;
+    const neg = $negocio;
+    if (!actual) return;
+
+    // Un cajero no puede quedarse en una vista de administrador.
+    if (actual.rol !== 'admin' && VISTAS_SOLO_ADMIN.has(vista)) {
+      vistaActual.set(neg === 'islas' ? 'islas' : 'registrar-venta');
+      return;
+    }
+    // El negocio de islas no tiene ventas ni inventario de lubricantes.
+    if (neg === 'islas' && !VISTAS_ISLAS.has(vista)) {
+      vistaActual.set('islas');
+    }
   });
 </script>
 
@@ -181,14 +231,20 @@
             <RegistrarEntrada />
           {:else if $vistaActual === 'inventario'}
             <Inventario />
+          {:else if $vistaActual === 'islas'}
+            <Islas />
           {:else if $vistaActual === 'historial'}
             <Historial />
           {:else if $vistaActual === 'historial-entradas'}
             <HistorialEntradas />
           {:else if $vistaActual === 'historial-salidas'}
             <HistorialSalidas />
+          {:else if $vistaActual === 'historial-islas'}
+            <HistorialIslas />
           {:else if $vistaActual === 'reportes'}
             <Reportes />
+          {:else if $vistaActual === 'resumen'}
+            <ResumenGeneral />
           {:else if $vistaActual === 'admin-usuarios'}
             <AdminUsuarios />
           {:else if $vistaActual === 'clientes'}

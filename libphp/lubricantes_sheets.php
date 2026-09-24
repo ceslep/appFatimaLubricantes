@@ -1,5 +1,5 @@
 <?php
-// v2.2 - Sheets Helper - fix lub_get_all range
+// v2.4 - Sheets Helper - lub_money() para importes con formato de moneda + lub_fecha_clave
 require_once __DIR__ . '/lubricantes_config.php';
 
 function lub_base64url_encode($data) {
@@ -26,6 +26,8 @@ function lub_cache_path($nombre) {
 }
 
 // Normaliza números escritos como texto ("$ 25.000,50" o "25000.5").
+// OJO: para DINERO usar lub_money(); este helper interpreta un punto suelto
+// como decimal, así que "$ 795.000" le devuelve 795 en vez de 795000.
 function lub_num($value) {
     $s = trim((string)$value);
     if ($s === '') return 0.0;
@@ -35,6 +37,39 @@ function lub_num($value) {
         $s = str_replace(',', '.', $s);
     }
     return floatval($s);
+}
+
+// Importe monetario leído de Sheets. La API devuelve el valor tal como se ve en
+// la celda (FORMATTED_VALUE), así que hay que distinguir dos situaciones:
+//   - Celda con formato de moneda es-CO: los puntos separan miles ("$ 795.000")
+//     y la coma es el decimal ("$ 25.000,50").
+//   - Celda sin formato: Sheets devuelve el número canónico, donde el punto es
+//     decimal ("15.25") y nunca hay separador de miles.
+// Regla: si hay coma, el formato es es-CO (puntos = miles). Si no la hay, un
+// punto seguido de exactamente 3 dígitos es separador de miles.
+function lub_money($value) {
+    $s = trim((string)$value);
+    if ($s === '') return 0.0;
+    // El espacio duro (nbsp) aparece en los formatos de moneda de Sheets.
+    $s = str_replace(['$', ' ', "\xC2\xA0"], '', $s);
+    if ($s === '') return 0.0;
+    if (strpos($s, ',') !== false) {
+        return floatval(str_replace(',', '.', str_replace('.', '', $s)));
+    }
+    if (preg_match('/^-?\d{1,3}(\.\d{3})+$/', $s)) {
+        return floatval(str_replace('.', '', $s));
+    }
+    return floatval($s);
+}
+
+// Normaliza una fecha 'dd/mm/YYYY' (con o sin hora) a una clave numérica YYYYMMDD,
+// útil para comparar rangos y para agrupar registros del mismo día.
+// Devuelve 0 cuando el texto no contiene una fecha válida.
+function lub_fecha_clave($fecha) {
+    if (preg_match('#(\d{1,2})/(\d{1,2})/(\d{4})#', (string)$fecha, $m)) {
+        return intval(sprintf('%04d%02d%02d', (int)$m[3], (int)$m[2], (int)$m[1]));
+    }
+    return 0;
 }
 
 function lub_get_token() {

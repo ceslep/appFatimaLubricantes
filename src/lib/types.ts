@@ -83,4 +83,66 @@ export interface UsuarioLogueado {
   nombre: string;
 }
 
-export type VistaActual = 'dashboard' | 'registrar-venta' | 'registrar-entrada' | 'inventario' | 'historial' | 'historial-entradas' | 'historial-salidas' | 'reportes' | 'admin-usuarios' | 'configuracion' | 'clientes';
+// ---- Islas de combustible ----
+// Cada isla tiene 2 mangueras: Gasolina y ACPM. Una fila = una manguera en el cierre del día.
+export interface IslaLectura {
+  row: number;
+  fecha: string;
+  isla: string;
+  combustible: string;
+  lectura_inicial: number;
+  lectura_final: number;
+  galones: number;
+  precio: number;
+  total: number;
+  cajero: string;
+  // Usuario de login (ej: 'yenifer'), con el que el admin filtra el historial.
+  usuario: string;
+}
+
+export interface ResumenCombustible {
+  galones: number;
+  total: number;
+  registros: number;
+}
+
+export interface ResumenNegocio {
+  total_ventas: number;
+  total_items: number;
+  num_ventas: number;
+}
+
+// Fila del desglose por cajero: las tres fuentes sumadas en una sola identidad.
+export interface ResumenCajeroFila {
+  cajero: string;
+  islas: number;
+  islas_galones: number;
+  estacion: number;
+  tienda: number;
+  total: number;
+  num_ventas: number;
+}
+
+// Fila del desglose por forma de pago (solo ventas: las islas no tienen forma de pago).
+export interface ResumenFormaPagoFila {
+  forma: string;
+  estacion: number;
+  tienda: number;
+  total: number;
+  num_ventas: number;
+}
+
+export interface ResumenGeneral {
+  desde: string;
+  hasta: string;
+  // Filtro de cajero aplicado ('' = todos).
+  cajero: string;
+  islas: { total: number; registros: number; combustibles: Record<string, ResumenCombustible> };
+  por_cajero: ResumenCajeroFila[];
+  por_forma_pago: ResumenFormaPagoFila[];
+  estacion: ResumenNegocio;
+  tienda: ResumenNegocio;
+  total: number;
+}
+
+export type VistaActual = 'dashboard' | 'registrar-venta' | 'registrar-entrada' | 'inventario' | 'islas' | 'historial' | 'historial-entradas' | 'historial-salidas' | 'historial-islas' | 'reportes' | 'resumen' | 'admin-usuarios' | 'configuracion' | 'clientes';

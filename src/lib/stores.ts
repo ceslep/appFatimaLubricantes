@@ -10,7 +10,10 @@ export const catalogo = writable<ProductoCatalogo[]>([]);
 
 export const isLoggedIn = derived(usuario, ($u) => $u !== null);
 export const isAdmin = derived(usuario, ($u) => $u?.rol === 'admin');
-export const isVentas = derived(usuario, ($u) => $u?.rol === 'ventas');
+// Rol operador del punto de venta: en la hoja de usuarios se guarda como 'cajero'.
+// Se mantiene 'ventas' por compatibilidad con sesiones antiguas.
+export const isCajero = derived(usuario, ($u) => $u?.rol === 'cajero' || $u?.rol === 'ventas');
+export const isVentas = isCajero;
 
 export function login(user: UsuarioLogueado) {
   usuario.set(user);

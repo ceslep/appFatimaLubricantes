@@ -20,6 +20,16 @@
   let guardandoLogo = $state(false);
   let avisoLogo = $state('');
   let errorLogo = $state('');
+  // Islas de combustible
+  let precioGasolina = $state('');
+  let precioAcpm = $state('');
+  let islas = $state<string[]>([]);
+  let nuevaIsla = $state('');
+  let guardandoPrecios = $state(false);
+  let avisoPrecios = $state('');
+  let guardandoIslas = $state(false);
+  let avisoIslas = $state('');
+  let errorIslas = $state('');
   const enlaceRegistroPublico = enlaceRegistro();
   const qrRegistro = (() => {
     try { return generarQrDataUrl(enlaceRegistroPublico, 10, 2); }
@@ -33,6 +43,13 @@
       clienteObligatorio = cfg.cliente_obligatorio === 'TRUE';
       mensajeRegistro = cfg.mensaje_registro || '';
       logoPreview = cfg.logo_data || '';
+    } catch (e) { console.error(e); }
+    // Las islas y sus precios siempre se leen del negocio principal (Estación Fátima).
+    try {
+      const cfgEstacion = await api.obtenerConfigEstacion();
+      precioGasolina = cfgEstacion.precio_gasolina || '';
+      precioAcpm = cfgEstacion.precio_acpm || '';
+      islas = cfgEstacion.islas || [];
     } catch (e) { console.error(e); }
     cargando = false;
   });
@@ -121,6 +138,58 @@
       avisoMensaje = 'No se pudo guardar: ' + (e.message || 'Error');
     }
     guardandoMensaje = false;
+  }
+
+  function num(v: string): number {
+    const n = parseFloat(String(v ?? '').replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  async function guardarPreciosCombustible() {
+    guardandoPrecios = true;
+    avisoPrecios = '';
+    try {
+      await api.guardarConfigEstacion({
+        precio_gasolina: String(num(precioGasolina)),
+        precio_acpm: String(num(precioAcpm)),
+      });
+      avisoPrecios = 'Precios guardados. Se usan para valorar las lecturas de las islas.';
+      setTimeout(() => { avisoPrecios = ''; }, 5000);
+    } catch (e: any) {
+      avisoPrecios = 'No se pudo guardar: ' + (e.message || 'Error');
+    }
+    guardandoPrecios = false;
+  }
+
+  async function guardarListaIslas(nuevaLista: string[], mensaje: string) {
+    guardandoIslas = true;
+    errorIslas = '';
+    try {
+      await api.guardarConfigEstacion({ islas: nuevaLista });
+      islas = nuevaLista;
+      avisoIslas = mensaje;
+      setTimeout(() => { avisoIslas = ''; }, 5000);
+    } catch (e: any) {
+      errorIslas = 'No se pudo guardar: ' + (e.message || 'Error');
+    }
+    guardandoIslas = false;
+  }
+
+  async function agregarIsla() {
+    const nombre = nuevaIsla.trim();
+    if (!nombre) { errorIslas = 'Escribe el nombre de la isla.'; return; }
+    if (islas.some((i) => i.toLowerCase() === nombre.toLowerCase())) {
+      errorIslas = 'Ya existe una isla con ese nombre.';
+      return;
+    }
+    if (islas.length >= 40) { errorIslas = 'Máximo 40 islas.'; return; }
+    await guardarListaIslas([...islas, nombre], `Isla "${nombre}" creada.`);
+    nuevaIsla = '';
+  }
+
+  async function quitarIsla(nombre: string) {
+    if (!confirm(`¿Eliminar la isla "${nombre}"? Las lecturas ya registradas se conservan.`)) return;
+    await guardarListaIslas(islas.filter((i) => i !== nombre), `Isla "${nombre}" eliminada.`);
   }
 
   async function copiarEnlace() {
@@ -303,6 +372,136 @@
           {avisoCliente}
         </p>
       {/if}
+    </div>
+
+    <div class="panel p-5 sm:p-6">
+      <div class="flex items-start gap-3 mb-4">
+        <div class="w-10 h-10 rounded-[12px] bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+          <Icon name="fuel" class="w-5 h-5" />
+        </div>
+        <div class="min-w-0">
+          <h3 class="text-[14.5px] font-bold text-slate-900 tracking-tight">Islas de combustible</h3>
+          <p class="text-[12.5px] text-slate-500 mt-0.5 leading-relaxed">
+            Crea cada isla y registra el precio por galón de <strong class="text-slate-700">Gasolina</strong> y
+            <strong class="text-slate-700">ACPM</strong>. Los cajeros solo ingresan las lecturas y el sistema
+            valoriza la diferencia.
+          </p>
+        </div>
+      </div>
+
+      <!-- Precios por galón -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label class="field-label" for="cfg-precio-gasolina">Precio galón Gasolina</label>
+          <input
+            id="cfg-precio-gasolina"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="0"
+            bind:value={precioGasolina}
+            class="input-base text-right"
+          />
+        </div>
+        <div>
+          <label class="field-label" for="cfg-precio-acpm">Precio galón ACPM</label>
+          <input
+            id="cfg-precio-acpm"
+            type="number"
+            min="0"
+            step="1"
+            placeholder="0"
+            bind:value={precioAcpm}
+            class="input-base text-right"
+          />
+        </div>
+      </div>
+
+      {#if avisoPrecios && !guardandoPrecios}
+        <p class="mt-3 text-[12.5px] flex items-start gap-2 {avisoPrecios.startsWith('No') ? 'text-rose-600' : 'text-emerald-700'}">
+          <Icon name={avisoPrecios.startsWith('No') ? 'alert' : 'circle-check'} class="w-4 h-4 mt-[1px] shrink-0" />
+          {avisoPrecios}
+        </p>
+      {/if}
+
+      <button
+        type="button"
+        onclick={guardarPreciosCombustible}
+        disabled={guardandoPrecios}
+        class="mt-4 inline-flex items-center gap-2 rounded-[10px] bg-blue-600 text-white text-[13px] font-semibold px-4 py-2.5
+          hover:bg-blue-700 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-60 disabled:pointer-events-none
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+      >
+        {#if guardandoPrecios}Guardando…{:else}<Icon name="check" class="w-4 h-4" strokeWidth={2.4} />Guardar precios{/if}
+      </button>
+
+      <!-- Catálogo de islas -->
+      <div class="mt-5 pt-4 border-t border-slate-100">
+        <p class="field-label">Islas creadas</p>
+
+        {#if islas.length === 0}
+          <p class="text-[12.5px] text-slate-400 mb-3">
+            Todavía no hay islas. Agrega la primera con el nombre que usan en la estación (ej: Isla 1).
+          </p>
+        {:else}
+          <ul class="space-y-2 mb-3">
+            {#each islas as isla (isla)}
+              <li class="flex items-center gap-3 rounded-xl bg-slate-50/80 ring-1 ring-inset ring-slate-100 px-3.5 py-2.5">
+                <span class="w-8 h-8 rounded-[9px] bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Icon name="fuel" class="w-4 h-4" />
+                </span>
+                <span class="text-[13px] font-semibold text-slate-800 truncate">{isla}</span>
+                <span class="ml-auto text-[11.5px] text-slate-400 shrink-0">2 mangueras</span>
+                <button
+                  type="button"
+                  onclick={() => quitarIsla(isla)}
+                  disabled={guardandoIslas}
+                  aria-label={'Eliminar isla ' + isla}
+                  class="p-2 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <Icon name="trash" class="w-4 h-4" />
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+          <input
+            type="text"
+            bind:value={nuevaIsla}
+            placeholder="Nombre de la isla (ej: Isla 1)"
+            maxlength="40"
+            autocomplete="off"
+            class="input-base flex-1"
+            onkeydown={(e) => { if (e.key === 'Enter') agregarIsla(); }}
+          />
+          <button
+            type="button"
+            onclick={agregarIsla}
+            disabled={guardandoIslas || islas.length >= 40}
+            class="inline-flex items-center justify-center gap-2 rounded-[10px] bg-slate-100 text-slate-700 text-[12.5px] font-semibold px-3.5 py-2.5
+              ring-1 ring-inset ring-slate-200 hover:bg-slate-200 transition-colors cursor-pointer shrink-0
+              disabled:opacity-50 disabled:pointer-events-none"
+          >
+            <Icon name="plus" class="w-4 h-4" strokeWidth={2.4} />
+            Agregar isla
+          </button>
+        </div>
+
+        {#if errorIslas}
+          <p class="mt-3 text-[12.5px] text-rose-600 flex items-start gap-2">
+            <Icon name="alert" class="w-4 h-4 mt-[1px] shrink-0" />
+            {errorIslas}
+          </p>
+        {/if}
+        {#if avisoIslas}
+          <p class="mt-3 text-[12.5px] text-emerald-700 flex items-start gap-2">
+            <Icon name="circle-check" class="w-4 h-4 mt-[1px] shrink-0" />
+            {avisoIslas}
+          </p>
+        {/if}
+      </div>
     </div>
 
     <div class="panel p-5 sm:p-6">
